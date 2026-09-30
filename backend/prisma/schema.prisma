@@ -1,0 +1,561 @@
+// Food Delivery Platform — Prisma Schema
+// Docs: docs/database.md
+//
+// Database switch:
+//   - Dev (default): SQLite   → DATABASE_URL="file:./dev.db"
+//   - Prod:           PostgreSQL → DATABASE_URL="postgresql://user:pass@host:5432/foodmitra"
+//                       then change provider below from "sqlite" to "postgresql".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// (Prisma emits these as native enums on PostgreSQL, and as String w/ runtime
+//  Zod validation on SQLite. Either way, the TypeScript types are correct.)
+// ============================================================================
+
+enum Role {
+  ADMIN
+  RESTAURANT
+  CUSTOMER
+  RIDER
+}
+
+enum RestaurantStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum RestaurantAvailability {
+  OPEN
+  CLOSED
+  TEMPORARILY_UNAVAILABLE
+}
+
+enum MenuItemAvailability {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+enum OrderStatus {
+  PLACED
+  APPROVED
+  PAID
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  CAPTURED
+  FAILED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum PaymentMethod {
+  RAZORPAY
+  MANUAL
+}
+
+enum RiderAssignmentStatus {
+  UNASSIGNED
+  ASSIGNED
+  PICKED_UP
+  DELIVERED
+}
+
+enum NotificationType {
+  ORDER_PLACED
+  PAYMENT_SUCCESSFUL
+  RESTAURANT_ACCEPTED
+  RESTAURANT_REJECTED
+  PREPARING
+  READY
+  RIDER_ASSIGNED
+  PICKED_UP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  NEW_ORDER
+  CUSTOMER_CANCELLATION
+  NEW_RESTAURANT_REGISTRATION
+  PAYMENT_ISSUE
+  REFUND_EVENT
+}
+
+enum AddressLabel {
+  HOME
+  WORK
+  OTHER
+}
+
+// ============================================================================
+// USER & AUTH
+// ============================================================================
+
+model User {
+  id           String   @id @default(cuid())
+  phone        String   @unique  // Primary identifier for customers
+  email        String?  @unique   // Required for admin (email-based login), optional otherwise
+  passwordHash String
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customerProfile    CustomerProfile?
+  refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  notifications      Notification[]      @relation("NotificationRecipient")
+  ordersAsCustomer   Order[]              @relation("OrderCustomer")
+  customerAddresses  DeliveryAddress[]   @relation("CustomerAddresses")
+  cart               Cart?                @relation("CustomerCart")
+  statusChanges      OrderStatusHistory[]
+  reviews            Review[]
+
+  @@index([role])
+}
+
+model CustomerProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName         String
+  phone            String?
+  defaultAddressId String?
+  defaultAddress   DeliveryAddress? @relation("CustomerDefaultAddress", fields: [defaultAddressId], references: [id])
+  // Customer milestones — used by admin "Today's Birthdays" + "Today's Anniversaries" view
+  dateOfBirth      DateTime?
+  anniversaryDate  DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([dateOfBirth])
+  @@index([anniversaryDate])
+}
+
+model DeliveryAddress {
+  id         String       @id @default(cuid())
+  customerId String
+  customer   User         @relation("CustomerAddresses", fields: [customerId], references: [id], onDelete: Cascade)
+  label      AddressLabel @default(HOME)
+  line1      String
+  line2      String?
+  city       String
+  state      String?
+  postalCode String?
+  latitude   Float
+  longitude  Float
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  // CustomerProfile.defaultAddress (FK back-relation)
+  defaultFor CustomerProfile[] @relation("CustomerDefaultAddress")
+
+  @@index([customerId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// OTP codes for signup phone verification + forgot-password flows.
+// One row per (phone, purpose) attempt. Demo mode returns the OTP in the API
+// response; in production swap the SMS provider in auth.service.ts.
+model OtpVerification {
+  id           String    @id @default(cuid())
+  phone        String    // normalized +91XXXXXXXXXX
+  otpHash      String    // sha256 hash of 6-digit OTP
+  purpose      String    // 'SIGNUP' | 'FORGOT_PASSWORD'
+  verifiedAt   DateTime? // null until user enters correct OTP
+  expiresAt    DateTime  // 5 min default
+  attemptsLeft Int       @default(3) // brute-force guard
+  consumedAt   DateTime? // null until used by register/reset-password
+  createdAt    DateTime  @default(now())
+
+  @@index([phone, purpose])
+  @@index([otpHash])
+}
+
+// ============================================================================
+// RESTAURANT
+// ============================================================================
+
+model Restaurant {
+  id                String                 @id @default(cuid())
+  name              String
+  description       String?
+  cuisine           String
+  logoUrl           String?
+  coverImageUrl      String?
+  phone             String
+  email             String?
+  openingTime       String                 @default("09:00")
+  closingTime       String                 @default("23:00")
+  minOrderAmount    Float                  @default(99)
+  deliveryFee       Float                  @default(30)
+  deliveryRadiusKm  Float                  @default(5)
+  avgRating         Float                  @default(0)
+  ratingCount       Int                    @default(0)
+  status            RestaurantStatus       @default(PENDING_APPROVAL)
+  availability      RestaurantAvailability  @default(CLOSED)
+  rejectionReason   String?
+  latitude          Float
+  longitude         Float
+  // Admin-managed rider assignment (no separate rider login)
+  assignedRiderName  String?
+  assignedRiderPhone String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  address        RestaurantAddress?
+  menuCategories MenuCategory[]
+  menuItems      MenuItem[]
+  orders         Order[]
+  reviews        Review[]
+  carts          Cart[]
+
+  @@index([status])
+  @@index([cuisine])
+  @@index([latitude, longitude])
+}
+
+model RestaurantAddress {
+  id           String     @id @default(cuid())
+  restaurantId String     @unique
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  line1        String
+  line2        String?
+  city         String
+  state        String?
+  postalCode   String?
+  latitude     Float
+  longitude    Float
+}
+
+// ============================================================================
+// MENU
+// ============================================================================
+
+model MenuCategory {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  displayOrder Int        @default(0)
+  items        MenuItem[]
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId, displayOrder])
+}
+
+model MenuItem {
+  id               String               @id @default(cuid())
+  categoryId       String
+  category         MenuCategory         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  restaurantId     String
+  restaurant       Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  price            Float
+  imageUrl         String?
+  isVeg            Boolean              @default(true)
+  availability     MenuItemAvailability @default(AVAILABLE)
+  displayOrder     Int                  @default(0)
+  prepTimeMinutes  Int                  @default(15)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([restaurantId])
+  @@index([categoryId])
+  @@index([restaurantId, availability])
+}
+
+// ============================================================================
+// CART
+// ============================================================================
+
+model Cart {
+  id           String     @id @default(cuid())
+  customerId   String     @unique
+  customer     User       @relation("CustomerCart", fields: [customerId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  items        CartItem[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model CartItem {
+  id         String   @id @default(cuid())
+  cartId     String
+  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  quantity   Int
+  unitPrice  Float    // snapshot at add-time; always re-fetched at checkout
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([cartId, menuItemId])
+}
+
+// ============================================================================
+// ORDERS
+// ============================================================================
+
+model Order {
+  id                     String                 @id @default(cuid())
+  shortCode              String                 @unique
+  customerId             String
+  customer               User                   @relation("OrderCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  restaurantId           String
+  restaurant             Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  // Delivery snapshot
+  deliveryAddressLine1   String
+  deliveryAddressLine2   String?
+  deliveryCity           String
+  deliveryLatitude       Float
+  deliveryLongitude      Float
+  deliveryPhone          String
+
+  // Pricing (server-computed, immutable after creation)
+  subtotal               Float
+  deliveryFee            Float
+  tax                    Float
+  discount               Float                  @default(0)
+  totalAmount            Float
+
+  // State
+  paymentStatus          PaymentStatus          @default(PENDING)
+  orderStatus            OrderStatus            @default(PLACED)
+
+  // Rider (future — set manually by Admin in MVP)
+  riderId                String?
+  riderName              String?
+  riderPhone             String?
+  riderAssignmentStatus  RiderAssignmentStatus  @default(UNASSIGNED)
+
+  notes                  String?
+  idempotencyKey         String?
+
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  items                  OrderItem[]
+  statusHistory          OrderStatusHistory[]
+  payment                Payment?
+  review                 Review?
+
+  @@index([customerId, createdAt])
+  @@index([restaurantId, orderStatus])
+  @@index([orderStatus])
+  @@index([createdAt])
+  @@index([idempotencyKey])
+}
+
+model OrderItem {
+  id                 String   @id @default(cuid())
+  orderId            String
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId         String
+  menuItem           MenuItem @relation(fields: [menuItemId], references: [id])
+  // Snapshots — immutable
+  itemNameSnapshot   String
+  itemPriceSnapshot  Float
+  isVeg              Boolean
+  quantity           Int
+  subtotal           Float
+
+  @@index([orderId])
+}
+
+model OrderStatusHistory {
+  id              String       @id @default(cuid())
+  orderId         String
+  order           Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus      OrderStatus?
+  toStatus        OrderStatus
+  changedByUserId String
+  changedBy       User         @relation(fields: [changedByUserId], references: [id])
+  note            String?
+  metadata        String?      // JSON-stringified (SQLite doesn't support Json natively)
+  createdAt       DateTime     @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+model Payment {
+  id                 String        @id @default(cuid())
+  orderId            String        @unique
+  order              Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  razorpayOrderId    String?       @unique
+  razorpayPaymentId  String?
+  razorpaySignature  String?
+  amount             Float
+  currency           String        @default("INR")
+  method             PaymentMethod @default(RAZORPAY)
+  status             PaymentStatus @default(PENDING)
+  refundId           String?
+  refundStatus       String?
+  refundAmount       Float?
+  failureReason      String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([razorpayOrderId])
+  @@index([razorpayPaymentId])
+  @@index([status])
+}
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String   @default("razorpay")
+  eventId     String   @unique
+  eventType   String
+  payloadHash String
+  processedAt DateTime @default(now())
+}
+
+// ============================================================================
+// RIDER (future)
+// ============================================================================
+
+model Rider {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  status           String   @default("OFFLINE") // OFFLINE | ONLINE | ON_DELIVERY
+  currentLatitude  Float?
+  currentLongitude Float?
+  vehicleNumber    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ============================================================================
+// REVIEWS
+// ============================================================================
+
+model Review {
+  id            String   @id @default(cuid())
+  orderId       String   @unique
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  rating        Int
+  comment       String?
+  isHidden      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([restaurantId, isHidden])
+  @@index([customerId])
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  body        String
+  data        String?           // JSON-stringified (SQLite)
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId, isRead, createdAt])
+}
+
+// ============================================================================
+// PLATFORM SETTINGS & CATEGORIES
+// ============================================================================
+
+model PlatformSettings {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+}
+
+/// Distance-based delivery fee tiers configured by the admin.
+/// When a customer checks out, the system computes the haversine distance
+/// between their delivery address and the restaurant, then picks the matching tier.
+/// If no tier matches, falls back to the restaurant's flat `deliveryFee`.
+model DeliveryFeeTier {
+  id        String   @id @default(cuid())
+  minKm     Float                 // inclusive lower bound
+  maxKm     Float                 // exclusive upper bound
+  fee       Float                 // INR rupees
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([minKm, maxKm])
+}
+
+/// Promo banners shown in the customer home carousel (above the search bar).
+/// Admin uploads images via the Promo Banners admin section.
+/// Active banners are sorted by displayOrder ascending and auto-rotate every 5s.
+model PromoBanner {
+  id           String   @id @default(cuid())
+  imageUrl     String                 // absolute or relative URL, e.g. "/uploads/promo-banners/abc.jpg"
+  title        String?                // optional alt text / caption
+  displayOrder Int      @default(0)    // lower = appears first
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, displayOrder])
+}

@@ -1,0 +1,35 @@
+{
+  "name": "foodmitra-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/server.ts",
+    "start": "bun src/server.ts",
+    "lint": "eslint .",
+    "db:push": "prisma db push --accept-data-loss",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "prisma migrate reset",
+    "seed": "bun scripts/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.11.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "jose": "^6.2.12",
+    "morgan": "^1.10.0",
+    "prisma": "^6.11.1",
+    "razorpay": "^2.9.8",
+    "zod": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^22.0.0",
+    "bun-types": "^1.3.4",
+    "typescript": "^5.5.4"
+  }
+}

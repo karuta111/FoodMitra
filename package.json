@@ -1,0 +1,14 @@
+{
+  "name": "foodmitra",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd web && next dev -p 3000",
+    "lint": "cd web && eslint .",
+    "backend:dev": "cd backend && DATABASE_URL=file:/home/z/my-project/backend/prisma/dev.db bun --hot src/server.ts",
+    "backend:seed": "cd backend && DATABASE_URL=file:/home/z/my-project/backend/prisma/dev.db bun run scripts/seed.ts",
+    "backend:db:push": "cd backend && DATABASE_URL=file:/home/z/my-project/backend/prisma/dev.db bunx prisma db push --force-reset",
+    "db:push": "echo 'DB is in /backend — run backend:db:push instead' && true",
+    "db:generate": "echo 'DB is in /backend' && true"
+  }
+}
