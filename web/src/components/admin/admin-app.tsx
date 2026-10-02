@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import {
  LayoutDashboard, Store, Users, ShoppingCart, CreditCard, Bell, Tag,
- CheckCircle, XCircle, Pause, Play, Shield, Ban, RotateCcw, Eye, Truck, Cake, Heart, Image, BarChart3, Plus, UtensilsCrossed, MapPin,
+ CheckCircle, XCircle, Pause, Play, Shield, Ban, RotateCcw, Eye, Truck, Cake, Heart, Image, BarChart3, Plus, UtensilsCrossed, MapPin, Pencil,
 } from 'lucide-react';
 import { DashboardShell, PageHeader, StatCard, EmptyState, type NavItem } from '@/components/shared/dashboard-shell';
 import { LocationPickerModal } from '@/components/shared/location-picker-modal';
+import { LogoUploader } from '@/components/shared/logo-uploader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +30,7 @@ type SectionId = 'dashboard' | 'restaurants' | 'customers' | 'orders' | 'payment
 interface DashboardStats {
  customers: { total: number };
  restaurants: { total: number; active: number; pending: number };
- orders: { today: number; pending: number; delivered: number };
+ orders: { today: number; pending: number; delivered: number; active: number; deliveredToday: number };
  revenue: { today: number; todayCount: number };
  reviews: { total: number };
 }
@@ -132,15 +133,15 @@ function AdminDashboard() {
  return (
  <div className="space-y-6">
  <PageHeader title="Platform Overview" subtitle="Today's snapshot of business activity" />
- <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
- <StatCard label="Total Customers" value={stats.customers.total} icon={Users} accent="blue" />
- <StatCard label="Total Restaurants" value={stats.restaurants.total} icon={Store} accent="orange" />
- <StatCard label="Active Restaurants" value={stats.restaurants.active} icon={CheckCircle} accent="green" />
- <StatCard label="Pending Approval" value={stats.restaurants.pending} icon={Pause} accent="red" />
- <StatCard label="Orders Today" value={stats.orders.today} icon={ShoppingCart} accent="orange" />
- <StatCard label="Pending Orders" value={stats.orders.pending} icon={Pause} accent="orange" />
- <StatCard label="Delivered (all time)" value={stats.orders.delivered} icon={CheckCircle} accent="green" />
+ <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+ {/* Line 1 — business overview */}
+ <StatCard label="Customers" value={stats.customers.total} sub="total" icon={Users} accent="blue" />
+ <StatCard label="Active Restaurants" value={`${stats.restaurants.active} / ${stats.restaurants.total}`} sub="active / total" icon={Store} accent="blue" />
  <StatCard label="Revenue Today" value={`₹${stats.revenue.today.toLocaleString('en-IN')}`} sub={`${stats.revenue.todayCount} payments`} icon={CreditCard} accent="green" />
+ {/* Line 2 — order metrics */}
+ <StatCard label="Orders Today" value={stats.orders.today} sub="total" icon={ShoppingCart} accent="orange" />
+ <StatCard label="Active Orders" value={stats.orders.active} sub="placed / preparing / out for delivery" icon={Truck} accent="orange" />
+ <StatCard label="Delivered Today" value={stats.orders.deliveredToday} sub="successful deliveries" icon={CheckCircle} accent="green" />
  </div>
 
  <Card>
@@ -186,6 +187,25 @@ function AdminRestaurants() {
  const [newLng, setNewLng] = useState('73.85');
  const [showLocationPicker, setShowLocationPicker] = useState(false);
  const [adding, setAdding] = useState(false);
+ const [newLogoUrl, setNewLogoUrl] = useState<string | null>(null);
+
+ // Edit restaurant state — editTarget is the restaurant being edited; editLoading gates the form while fetching
+ const [editTarget, setEditTarget] = useState<RestaurantListItem | null>(null);
+ const [editLoading, setEditLoading] = useState(false);
+ const [editSaving, setEditSaving] = useState(false);
+ const [editName, setEditName] = useState('');
+ const [editCuisine, setEditCuisine] = useState('');
+ const [editPhone, setEditPhone] = useState('');
+ const [editEmail, setEditEmail] = useState('');
+ const [editDesc, setEditDesc] = useState('');
+ const [editOpening, setEditOpening] = useState('09:00');
+ const [editClosing, setEditClosing] = useState('23:00');
+ const [editAddr1, setEditAddr1] = useState('');
+ const [editCity, setEditCity] = useState('Pune');
+ const [editLat, setEditLat] = useState('18.52');
+ const [editLng, setEditLng] = useState('73.85');
+ const [showEditLocationPicker, setShowEditLocationPicker] = useState(false);
+ const [editLogoUrl, setEditLogoUrl] = useState<string | null>(null);
 
  const load = () => {
  setLoading(true);
@@ -222,17 +242,106 @@ function AdminRestaurants() {
  description: newDesc || undefined,
  openingTime: newOpening,
  closingTime: newClosing,
+ logoUrl: newLogoUrl || undefined,
  address: newAddr1 ? { line1: newAddr1, city: newCity, latitude: parseFloat(newLat), longitude: parseFloat(newLng) } : undefined,
  });
  toast.success('Restaurant created');
  setShowAdd(false);
  setNewName(''); setNewCuisine(''); setNewPhone(''); setNewEmail(''); setNewDesc('');
  setNewAddr1('');
+ setNewLogoUrl(null);
  load();
  } catch (e) {
  toastApiError(e, 'Failed to create restaurant');
  } finally {
  setAdding(false);
+ }
+ };
+
+ // ── Edit restaurant: open dialog + fetch full restaurant (with address) + pre-fill the form ──
+ const openEdit = async (r: RestaurantListItem) => {
+ setEditTarget(r);
+ setEditLoading(true);
+ // optimistic defaults from the list row so the form is usable even before fetch resolves
+ setEditName(r.name);
+ setEditCuisine(r.cuisine || '');
+ setEditPhone(r.phone || '');
+ setEditEmail('');
+ setEditDesc('');
+ setEditOpening('09:00');
+ setEditClosing('23:00');
+ setEditAddr1('');
+ setEditCity('Pune');
+ setEditLat('18.52');
+ setEditLng('73.85');
+ setEditLogoUrl(null);
+ try {
+ const full = await api.get<{
+ name: string;
+ cuisine: string;
+ phone: string;
+ email: string | null;
+ description: string | null;
+ openingTime: string;
+ closingTime: string;
+ latitude: number;
+ longitude: number;
+ logoUrl: string | null;
+ address: { line1: string; line2: string | null; city: string; state: string | null; postalCode: string | null; latitude: number; longitude: number } | null;
+ }>(`/api/v1/admin/restaurants/${r.id}`);
+ setEditName(full.name || '');
+ setEditCuisine(full.cuisine || '');
+ setEditPhone(full.phone || '');
+ setEditEmail(full.email || '');
+ setEditDesc(full.description || '');
+ setEditOpening(full.openingTime || '09:00');
+ setEditClosing(full.closingTime || '23:00');
+ setEditLogoUrl(full.logoUrl || null);
+ if (full.address) {
+ setEditAddr1(full.address.line1 || '');
+ setEditCity(full.address.city || 'Pune');
+ setEditLat(String(full.address.latitude ?? 18.52));
+ setEditLng(String(full.address.longitude ?? 73.85));
+ } else {
+ setEditLat(String(full.latitude ?? 18.52));
+ setEditLng(String(full.longitude ?? 73.85));
+ }
+ } catch (e) {
+ toastApiError(e, 'Failed to load restaurant details');
+ setEditTarget(null);
+ } finally {
+ setEditLoading(false);
+ }
+ };
+
+ const saveEdit = async (e: React.FormEvent) => {
+ e.preventDefault();
+ if (!editTarget) return;
+ setEditSaving(true);
+ try {
+ await api.patch(`/api/v1/admin/restaurants/${editTarget.id}`, {
+ name: editName,
+ cuisine: editCuisine || undefined,
+ phone: editPhone || undefined,
+ email: editEmail || undefined,
+ description: editDesc || undefined,
+ openingTime: editOpening,
+ closingTime: editClosing,
+ logoUrl: editLogoUrl || null,
+ address: editAddr1 ? {
+ line1: editAddr1,
+ city: editCity,
+ latitude: parseFloat(editLat),
+ longitude: parseFloat(editLng),
+ } : undefined,
+ });
+ toast.success('Restaurant updated');
+ setEditTarget(null);
+ load();
+ } catch (e) {
+ toastApiError(e, 'Failed to update restaurant');
+ } finally {
+ setEditSaving(false);
  }
  };
 
@@ -282,6 +391,9 @@ function AdminRestaurants() {
  <TableCell><AvailabilityBadge status={r.availability} /></TableCell>
  <TableCell className="text-xs">{r.phone || '—'}</TableCell>
  <TableCell className="text-right space-x-1">
+ <Button size="sm" variant="outline" onClick={() => openEdit(r)}>
+ <Pencil className="w-3 h-3 mr-1" /> Edit
+ </Button>
  <Button size="sm" variant="outline" onClick={() => setMenuTarget(r)}>
  <UtensilsCrossed className="w-3 h-3 mr-1" /> Menu
  </Button>
@@ -320,6 +432,7 @@ function AdminRestaurants() {
  <DialogTitle>Add New Restaurant</DialogTitle>
  </DialogHeader>
  <form onSubmit={createRestaurant} className="space-y-3">
+ <LogoUploader value={newLogoUrl} onChange={setNewLogoUrl} fallbackLetter={newName || 'R'} />
  <div className="grid grid-cols-2 gap-3">
  <div className="space-y-1.5">
  <Label htmlFor="r-name">Name *</Label>
@@ -380,7 +493,79 @@ function AdminRestaurants() {
  </DialogContent>
  </Dialog>
 
- {/* Location Picker Modal */}
+ {/* Edit Restaurant Dialog — same fields as Add, pre-filled with the restaurant's current data */}
+ <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+ <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+ <DialogHeader>
+ <DialogTitle>Edit Restaurant{editTarget ? ` — ${editTarget.name}` : ''}</DialogTitle>
+ </DialogHeader>
+ {editLoading ? (
+ <div className="py-8 text-center text-sm text-slate-500">Loading restaurant details…</div>
+ ) : (
+ <form onSubmit={saveEdit} className="space-y-3">
+ <LogoUploader value={editLogoUrl} onChange={setEditLogoUrl} fallbackLetter={editName || (editTarget?.name ?? 'R')} />
+ <div className="grid grid-cols-2 gap-3">
+ <div className="space-y-1.5">
+ <Label htmlFor="e-name">Name *</Label>
+ <Input id="e-name" placeholder="e.g. Pizza Palace" value={editName} onChange={(e) => setEditName(e.target.value)} required />
+ </div>
+ <div className="space-y-1.5">
+ <Label htmlFor="e-cuisine">Cuisine</Label>
+ <Input id="e-cuisine" placeholder="e.g. Italian" value={editCuisine} onChange={(e) => setEditCuisine(e.target.value)} />
+ </div>
+ </div>
+ <div className="grid grid-cols-2 gap-3">
+ <div className="space-y-1.5">
+ <Label htmlFor="e-phone">Phone</Label>
+ <Input id="e-phone" placeholder="+91 98765 43210" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+ </div>
+ <div className="space-y-1.5">
+ <Label htmlFor="e-email">Email</Label>
+ <Input id="e-email" placeholder="restaurant@example.com" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
+ </div>
+ </div>
+ <div className="space-y-1.5">
+ <Label htmlFor="e-desc">Description</Label>
+ <Textarea id="e-desc" placeholder="Brief description of the restaurant" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
+ </div>
+ <div className="grid grid-cols-2 gap-3">
+ <div className="space-y-1.5">
+ <Label htmlFor="e-open">Opening</Label>
+ <Input id="e-open" type="time" value={editOpening} onChange={(e) => setEditOpening(e.target.value)} />
+ </div>
+ <div className="space-y-1.5">
+ <Label htmlFor="e-close">Closing</Label>
+ <Input id="e-close" type="time" value={editClosing} onChange={(e) => setEditClosing(e.target.value)} />
+ </div>
+ </div>
+ <div className="space-y-1.5">
+ <Label htmlFor="e-addr">Address</Label>
+ <div className="flex gap-2">
+ <Input id="e-addr" placeholder="Will auto-fill from map" value={editAddr1} onChange={(e) => setEditAddr1(e.target.value)} className="flex-1" />
+ <Button type="button" size="sm" variant="outline" onClick={() => setShowEditLocationPicker(true)}>
+ <MapPin className="w-3 h-3 mr-1" /> Pick on map
+ </Button>
+ </div>
+ {(parseFloat(editLat) !== 18.52 || parseFloat(editLng) !== 73.85) && (
+ <p className="text-xs text-slate-500 mt-1">Selected: {editLat}, {editLng}</p>
+ )}
+ </div>
+ <div className="space-y-1.5">
+ <Label htmlFor="e-city">City</Label>
+ <Input id="e-city" value={editCity} onChange={(e) => setEditCity(e.target.value)} />
+ </div>
+ <DialogFooter>
+ <Button type="button" variant="ghost" onClick={() => setEditTarget(null)}>Cancel</Button>
+ <Button type="submit" disabled={editSaving || !editName} className="bg-orange-500 hover:bg-orange-600">
+ {editSaving ? 'Saving…' : 'Save changes'}
+ </Button>
+ </DialogFooter>
+ </form>
+ )}
+ </DialogContent>
+ </Dialog>
+
+ {/* Location Picker Modal (for Add) */}
  <LocationPickerModal
  open={showLocationPicker}
  onOpenChange={setShowLocationPicker}
@@ -390,6 +575,20 @@ function AdminRestaurants() {
  setNewLat(lat.toFixed(6));
  setNewLng(lng.toFixed(6));
  if (label && !newAddr1) setNewAddr1(label);
+ toast.success(`Location set: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+ }}
+ />
+
+ {/* Location Picker Modal (for Edit) */}
+ <LocationPickerModal
+ open={showEditLocationPicker}
+ onOpenChange={setShowEditLocationPicker}
+ currentLat={parseFloat(editLat) || 18.52}
+ currentLng={parseFloat(editLng) || 73.85}
+ onSelect={(lat, lng, label) => {
+ setEditLat(lat.toFixed(6));
+ setEditLng(lng.toFixed(6));
+ if (label && !editAddr1) setEditAddr1(label);
  toast.success(`Location set: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
  }}
  />
@@ -441,6 +640,7 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  const [itemDesc, setItemDesc] = useState('');
  const [itemVeg, setItemVeg] = useState(true);
  const [itemCatId, setItemCatId] = useState('');
+ const [itemImageUrl, setItemImageUrl] = useState<string | null>(null);
 
  const load = () => {
  setLoading(true);
@@ -476,17 +676,17 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  try {
  if (editingItem) {
  await api.patch(`/api/v1/menu/items/${editingItem.id}`, {
- name: itemName, price: parseFloat(itemPrice), description: itemDesc || undefined, isVeg: itemVeg,
+ name: itemName, price: parseFloat(itemPrice), description: itemDesc || undefined, isVeg: itemVeg, imageUrl: itemImageUrl || null,
  });
  toast.success('Item updated');
  } else {
  await api.post('/api/v1/menu/items', {
  restaurantId: restaurant.id, categoryId: itemCatId,
- name: itemName, price: parseFloat(itemPrice), description: itemDesc || undefined, isVeg: itemVeg,
+ name: itemName, price: parseFloat(itemPrice), description: itemDesc || undefined, isVeg: itemVeg, imageUrl: itemImageUrl || undefined,
  });
  toast.success('Item added');
  }
- setItemName(''); setItemPrice(''); setItemDesc(''); setItemVeg(true); setItemCatId('');
+ setItemName(''); setItemPrice(''); setItemDesc(''); setItemVeg(true); setItemCatId(''); setItemImageUrl(null);
  setShowItemForm(null); setEditingItem(null);
  load();
  } catch (e) { toastApiError(e, 'Failed'); }
@@ -499,6 +699,7 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  setItemDesc(item.description || '');
  setItemVeg(item.isVeg);
  setItemCatId(catId);
+ setItemImageUrl(item.imageUrl || null);
  setShowItemForm(catId);
  };
 
@@ -537,7 +738,7 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  <div className="flex items-center justify-between">
  <CardTitle className="text-sm">{cat.name} ({cat.items.length})</CardTitle>
  <div className="flex gap-1">
- <Button size="sm" variant="ghost" className="text-orange-600" onClick={() => { setShowItemForm(showItemForm === cat.id ? null : cat.id); setItemCatId(cat.id); setEditingItem(null); setItemName(''); setItemPrice(''); setItemDesc(''); }}>
+ <Button size="sm" variant="ghost" className="text-orange-600" onClick={() => { setShowItemForm(showItemForm === cat.id ? null : cat.id); setItemCatId(cat.id); setEditingItem(null); setItemName(''); setItemPrice(''); setItemDesc(''); setItemImageUrl(null); }}>
  <Plus className="w-3 h-3 mr-1" /> Add item
  </Button>
  <Button size="sm" variant="ghost" className="text-red-600 h-7 w-7 p-0" onClick={() => deleteCategory(cat.id)}>
@@ -551,6 +752,7 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  {showItemForm === cat.id && (
  <form onSubmit={addItem} className="mb-3 p-3 bg-slate-50 rounded-lg space-y-2">
  <p className="text-xs font-medium text-slate-600">{editingItem ? 'Edit item' : 'New item'}</p>
+ <LogoUploader value={itemImageUrl} onChange={setItemImageUrl} fallbackLetter={itemName || 'M'} size={64} label="Item photo" hint="Optional. Shown to customers next to the item name. PNG / JPG / WebP, under 4 MB." />
  <div className="grid grid-cols-3 gap-2">
  <Input placeholder="Item name" value={itemName} onChange={(e) => setItemName(e.target.value)} required className="col-span-2" />
  <Input placeholder="Price ₹" type="number" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} required />
@@ -576,6 +778,14 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  <div key={item.id} className="flex items-center justify-between p-2 rounded hover:bg-slate-50">
  <div className="flex items-center gap-2">
  <span className={`w-2 h-2 rounded-full ${item.isVeg ? 'bg-green-500' : 'bg-red-500'}`} />
+ {item.imageUrl ? (
+ // eslint-disable-next-line @next/next/no-img-element
+ <img src={item.imageUrl} alt={item.name} className="w-9 h-9 rounded-lg object-cover shrink-0" />
+ ) : (
+ <div className="w-9 h-9 rounded-lg bg-orange-50 flex items-center justify-center text-orange-400 text-sm font-semibold shrink-0">
+ {item.name.charAt(0)}
+ </div>
+ )}
  <div>
  <p className="text-sm font-medium text-slate-700">{item.name}</p>
  <p className="text-xs text-slate-400">₹{item.price} • {item.availability === 'AVAILABLE' ? 'Available' : 'Unavailable'}</p>

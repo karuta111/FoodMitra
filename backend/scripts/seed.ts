@@ -163,14 +163,13 @@ async function main() {
     data: { email: 'admin@demo.com', phone: '+919999999999', passwordHash: adminPass, role: 'ADMIN', isActive: true },
   });
 
-  // 4. Restaurants (admin-managed, no owner)
+  // 4. Restaurants (admin-managed, no owner) — 5 restaurants
   const RESTAURANT_NAMES = [
     { name: 'Pizza Palace', cuisineIdx: 0 },
     { name: 'Spice Garden', cuisineIdx: 1 },
     { name: 'Dragon Wok', cuisineIdx: 2 },
     { name: 'Dosa Junction', cuisineIdx: 3 },
     { name: 'Burger Bay', cuisineIdx: 4 },
-    { name: 'Udupi Krishna', cuisineIdx: 3 },
   ];
 
   const restaurants = [];
@@ -267,8 +266,9 @@ async function main() {
   }
 
   // 6. Orders (30 across all states)
+  // Order state machine (simplified): PLACED → APPROVED → PAID → DELIVERED (+ CANCELLED)
   console.log('Creating 30 orders across all states…');
-  const STATUSES = ['PENDING_PAYMENT', 'PAID', 'RESTAURANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'PAYMENT_FAILED'];
+  const STATUSES = ['PLACED', 'APPROVED', 'PAID', 'DELIVERED', 'CANCELLED'];
 
   for (let i = 0; i < 30; i++) {
     const restaurant = restaurants[i % restaurants.length];
@@ -294,8 +294,12 @@ async function main() {
     const totalAmount = round2(subtotal + deliveryFee + tax);
 
     const status = STATUSES[i % STATUSES.length];
-    const isPaid = !['PENDING_PAYMENT', 'PAYMENT_FAILED', 'CANCELLED'].includes(status);
-    const paymentStatus = status === 'PENDING_PAYMENT' ? 'PENDING' : status === 'PAYMENT_FAILED' ? 'FAILED' : status === 'CANCELLED' ? 'REFUNDED' : 'CAPTURED';
+    const isPaid = status === 'PAID' || status === 'DELIVERED';
+    const isApproved = isPaid || status === 'APPROVED';
+    const paymentStatus =
+      status === 'PLACED' ? 'PENDING'
+      : status === 'CANCELLED' ? 'REFUNDED'
+      : 'CAPTURED';
 
     const shortCode = `SEED${(i + 1).toString().padStart(3, '0')}`;
     const order = await db.order.create({
@@ -330,17 +334,13 @@ async function main() {
       },
     });
 
-    // Status history
-    const historyStatuses = ['PENDING_PAYMENT'];
+    // Status history — build a valid timeline per the simplified state machine:
+    //   PLACED → APPROVED → PAID → DELIVERED  (+ CANCELLED from any pre-delivery state)
+    const historyStatuses: string[] = ['PLACED'];
+    if (isApproved) historyStatuses.push('APPROVED');
     if (isPaid) historyStatuses.push('PAID');
-    if (['RESTAURANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(status)) historyStatuses.push('RESTAURANT_ACCEPTED');
-    if (['PREPARING', 'READY_FOR_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(status)) historyStatuses.push('PREPARING');
-    if (['READY_FOR_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(status)) historyStatuses.push('READY_FOR_PICKUP');
-    if (['PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(status)) historyStatuses.push('PICKED_UP');
-    if (['OUT_FOR_DELIVERY', 'DELIVERED'].includes(status)) historyStatuses.push('OUT_FOR_DELIVERY');
     if (status === 'DELIVERED') historyStatuses.push('DELIVERED');
     if (status === 'CANCELLED') historyStatuses.push('CANCELLED');
-    if (status === 'PAYMENT_FAILED') historyStatuses.push('PAYMENT_FAILED');
 
     for (let h = 0; h < historyStatuses.length; h++) {
       await db.orderStatusHistory.create({
@@ -349,7 +349,7 @@ async function main() {
           fromStatus: h === 0 ? null : (historyStatuses[h - 1] as any),
           toStatus: historyStatuses[h] as any,
           changedByUserId: h === 0 ? customer.id : admin.id,
-          note: h === 0 ? 'Order placed' : h === 1 ? 'Payment captured' : 'Status update',
+          note: h === 0 ? 'Order placed' : h === 1 ? 'Order approved by admin' : h === 2 ? 'Payment captured' : 'Status update',
         },
       });
     }
@@ -367,7 +367,7 @@ async function main() {
           status: paymentStatus as any,
         },
       });
-    } else if (status === 'PENDING_PAYMENT') {
+    } else if (status === 'PLACED') {
       await db.payment.create({
         data: {
           orderId: order.id,
