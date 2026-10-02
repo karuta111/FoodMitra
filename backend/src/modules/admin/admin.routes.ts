@@ -86,6 +86,8 @@ router.post('/restaurants', asyncHandler(async (req, res) => {
       minOrderAmount: minOrderAmount ?? 99,
       deliveryFee: deliveryFee ?? 30,
       deliveryRadiusKm: deliveryRadiusKm ?? 10,
+      logoUrl: (req.body as { logoUrl?: string }).logoUrl || null,
+      coverImageUrl: (req.body as { coverImageUrl?: string }).coverImageUrl || null,
       status: 'ACTIVE',
       availability: 'OPEN',
       latitude: address?.latitude ?? 18.52,
@@ -109,17 +111,62 @@ router.post('/restaurants', asyncHandler(async (req, res) => {
   return ok(res, restaurant, 201);
 }));
 
-// PATCH /api/v1/admin/restaurants/:id — admin edits restaurant details
+// POST /api/v1/admin/upload — generic image upload (base64 data URL → Cloudinary → { url }).
+// Used by the restaurant logo/photo picker in the Add + Edit dialogs: the frontend uploads
+// the file immediately when the user picks it, gets back the Cloudinary URL, shows a preview,
+// then includes the URL in the final POST/PATCH for the restaurant. Keeps Cloudinary secrets
+// server-side (the API key/secret never reach the browser).
+router.post('/upload', asyncHandler(async (req, res) => {
+  const { imageDataUrl } = req.body as { imageDataUrl?: string };
+  if (!imageDataUrl) throw AppError.badRequest('imageDataUrl is required (data:image/...;base64,...)');
+  const imageUrl = await saveBase64Image(imageDataUrl);
+  return ok(res, { url: imageUrl }, 201);
+}));
+
+// PATCH /api/v1/admin/restaurants/:id — admin edits restaurant details (all fields, same as create)
 router.patch('/restaurants/:id', asyncHandler(async (req, res) => {
   const patch = req.body as Record<string, unknown>;
-  const allowed = ['name', 'cuisine', 'phone', 'email', 'description', 'openingTime', 'closingTime', 'minOrderAmount', 'deliveryFee', 'deliveryRadiusKm', 'availability', 'latitude', 'longitude'];
+  const allowed = ['name', 'cuisine', 'phone', 'email', 'description', 'openingTime', 'closingTime', 'minOrderAmount', 'deliveryFee', 'deliveryRadiusKm', 'availability', 'latitude', 'longitude', 'logoUrl', 'coverImageUrl'];
   const data: Record<string, unknown> = {};
   for (const key of allowed) {
     if (patch[key] !== undefined) data[key] = patch[key];
   }
+  // Nested address update — accept the same { line1, line2?, city, state?, postalCode?, latitude, longitude } shape as create.
+  // Creates the address row if it doesn't exist yet, otherwise updates it in place.
+  const address = patch['address'] as
+    | { line1: string; line2?: string; city: string; state?: string; postalCode?: string; latitude: number; longitude: number }
+    | undefined;
+  if (address) {
+    // Keep the restaurant's own lat/lng in sync with the address lat/lng so map queries work.
+    data['latitude'] = address.latitude;
+    data['longitude'] = address.longitude;
+    data['address'] = {
+      upsert: {
+        create: {
+          line1: address.line1,
+          line2: address.line2 || null,
+          city: address.city,
+          state: address.state || null,
+          postalCode: address.postalCode || null,
+          latitude: address.latitude,
+          longitude: address.longitude,
+        },
+        update: {
+          line1: address.line1,
+          line2: address.line2 || null,
+          city: address.city,
+          state: address.state || null,
+          postalCode: address.postalCode || null,
+          latitude: address.latitude,
+          longitude: address.longitude,
+        },
+      },
+    };
+  }
   const updated = await db.restaurant.update({
     where: { id: req.params.id as string },
     data,
+    include: { address: true },
   });
   return ok(res, updated);
 }));

@@ -18,6 +18,8 @@ export class AdminService {
       deliveredOrders,
       todayPayments,
       pendingReviews,
+      activeOrders,
+      deliveredToday,
     ] = await Promise.all([
       db.user.count({ where: { role: 'CUSTOMER' } }),
       db.restaurant.count(),
@@ -33,6 +35,23 @@ export class AdminService {
         _count: true,
       }),
       db.review.count({ where: { isHidden: false } }),
+      // Active orders = today's orders currently in-flight (PLACED + APPROVED + PAID, not yet DELIVERED/CANCELLED).
+      // Scoped to createdAt >= todayStart so it reconciles with Orders Today:
+      //   Orders Today = Active + Delivered + Cancelled (all today, by createdAt)
+      db.order.count({
+        where: {
+          createdAt: { gte: todayStart },
+          orderStatus: { in: ['PLACED', 'APPROVED', 'PAID'] },
+        },
+      }),
+      // Delivered today = orders created today that reached DELIVERED.
+      // Uses createdAt (not updatedAt) so it stays in the same time window as Orders Today.
+      db.order.count({
+        where: {
+          createdAt: { gte: todayStart },
+          orderStatus: 'DELIVERED',
+        },
+      }),
     ]);
 
     return {
@@ -46,6 +65,8 @@ export class AdminService {
         today: ordersToday,
         pending: pendingOrders,
         delivered: deliveredOrders,
+        active: activeOrders,
+        deliveredToday,
       },
       revenue: {
         today: todayPayments._sum.amount ?? 0,

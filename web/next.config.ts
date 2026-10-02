@@ -8,9 +8,10 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  // Proxy all /api/v1/* requests to the standalone Express backend.
+  // Proxy all /api/v1/* and /uploads/* requests to the standalone Express backend.
   // The browser calls Next.js on port 3000; Next.js forwards to the backend on port 4000.
-  // This keeps everything same-origin from the browser's perspective (no CORS issues).
+  // This keeps everything same-origin from the browser's perspective (no CORS issues,
+  // and works inside sandboxes where the browser cannot reach port 4000 directly).
   async rewrites() {
     return [
       {
@@ -20,6 +21,10 @@ const nextConfig: NextConfig = {
       {
         source: "/api/health",
         destination: `${BACKEND_URL}/health`,
+      },
+      {
+        source: "/uploads/:path*",
+        destination: `${BACKEND_URL}/uploads/:path*`,
       },
     ];
   },
