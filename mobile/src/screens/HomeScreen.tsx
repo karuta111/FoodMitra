@@ -19,6 +19,8 @@ import { api } from '../api/client';
 import { useAuthStore } from '../store/auth';
 import { colors, radius, shadow } from '../theme/colors';
 import { Screen } from '../components/ui';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LocationPickerModal } from '../components/LocationPickerModal';
 import type { Restaurant } from '../types';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -150,10 +152,16 @@ function RestaurantCard({ item, onPress }: { item: Restaurant; onPress: () => vo
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }: any) {
   const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  
+  // Location state
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [selectedLat, setSelectedLat] = useState(18.52);
+  const [selectedLng, setSelectedLng] = useState(73.85);
 
   const load = useCallback(async () => {
     try {
@@ -192,11 +200,16 @@ export default function HomeScreen({ navigation }: any) {
   return (
     <Screen>
       {/* ── Hero header ── */}
-      <View style={s.hero}>
+      <View style={[s.hero, { paddingTop: Math.max(insets.top, 14) }]}>
         <View style={s.heroTop}>
           <View>
             <Text style={s.hello}>Hello, {user?.fullName?.split(' ')[0] || 'there'} 👋</Text>
-            <Text style={s.hTitle}>What are you craving{'\n'}today?</Text>
+            <Text style={s.hTitle}>Hungry? Let's get you fed.</Text>
+            <TouchableOpacity style={s.locationBtn} onPress={() => setShowLocationModal(true)}>
+              <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.9)" />
+              <Text style={s.locationBtnText}>Deliver to: lat {selectedLat.toFixed(2)}, lng {selectedLng.toFixed(2)}</Text>
+              <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.9)" />
+            </TouchableOpacity>
           </View>
           <TouchableOpacity
             style={s.notifBtn}
@@ -290,6 +303,19 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={s.navText}>Profile</Text>
         </TouchableOpacity>
       </View>
+
+      <LocationPickerModal
+        visible={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+        currentLat={selectedLat}
+        currentLng={selectedLng}
+        onSelect={(lat, lng) => {
+          setSelectedLat(lat);
+          setSelectedLng(lng);
+          // In a real app, you'd likely fetch restaurants nearby based on lat/lng here
+          // e.g., loadNearbyRestaurants(lat, lng);
+        }}
+      />
     </Screen>
   );
 }
@@ -446,6 +472,22 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: '#fff',
     lineHeight: 30,
+  },
+  locationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    gap: 4,
+  },
+  locationBtnText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.95)',
+    fontWeight: '500',
   },
   notifBtn: {
     width: 38,
