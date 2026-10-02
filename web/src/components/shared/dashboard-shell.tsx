@@ -24,6 +24,8 @@ interface DashboardShellProps {
   children: ReactNode;
   headerColor?: string;
   roleLabel: string;
+  /** When set, overrides the active nav item's label as the top bar page title. */
+  pageTitleOverride?: string;
 }
 
 export function DashboardShell({
@@ -34,15 +36,16 @@ export function DashboardShell({
   children,
   headerColor,
   roleLabel,
+  pageTitleOverride,
 }: DashboardShellProps) {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const initials = (user?.fullName || user?.email || 'U').slice(0, 2).toUpperCase();
 
-  // Top bar shows the active section's label as the page title
+  // Top bar shows the active section's label as the page title (overridable for sub-views like Menu management)
   const activeItem = navItems.find((item) => item.id === activeId);
-  const pageTitle = activeItem?.label || title;
+  const pageTitle = pageTitleOverride || activeItem?.label || title;
 
   return (
     <div className="min-h-screen flex bg-slate-50">

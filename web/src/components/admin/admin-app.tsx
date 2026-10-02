@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
  LayoutDashboard, Store, Users, ShoppingCart, CreditCard, Bell, Tag,
- CheckCircle, XCircle, Pause, Play, Shield, Ban, RotateCcw, Eye, Truck, Cake, Heart, Image, BarChart3, Plus, UtensilsCrossed, MapPin, Pencil,
+ CheckCircle, XCircle, Pause, Play, Shield, Ban, RotateCcw, Eye, Truck, Cake, Heart, Image, BarChart3, Plus, UtensilsCrossed, MapPin, Pencil, Trash2, ArrowLeft,
 } from 'lucide-react';
 import { DashboardShell, PageHeader, StatCard, EmptyState, type NavItem } from '@/components/shared/dashboard-shell';
 import { LocationPickerModal } from '@/components/shared/location-picker-modal';
@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -93,18 +94,26 @@ const NAV_ITEMS: NavItem[] = [
 
 export function AdminApp() {
  const [section, setSection] = useState<SectionId>('dashboard');
+ // Lifted to AdminApp so the menu view can render as a full page (replacing the section content)
+ // instead of as a dialog overlay. Set by AdminRestaurants' Menu button; cleared by the back button.
+ const [menuTarget, setMenuTarget] = useState<RestaurantListItem | null>(null);
 
  return (
  <DashboardShell
  title="FoodMitra"
  navItems={NAV_ITEMS}
- activeId={section}
- onSelect={(id) => setSection(id as SectionId)}
+ activeId={menuTarget ? 'restaurants' : section}
+ onSelect={(id) => { setMenuTarget(null); setSection(id as SectionId); }}
  headerColor="bg-slate-800"
  roleLabel="Admin Console"
+ pageTitleOverride={menuTarget ? 'Menu management' : undefined}
  >
+ {menuTarget ? (
+ <AdminMenuManagement restaurant={menuTarget} onClose={() => setMenuTarget(null)} />
+ ) : (
+ <>
  {section === 'dashboard' && <AdminDashboard />}
- {section === 'restaurants' && <AdminRestaurants />}
+ {section === 'restaurants' && <AdminRestaurants onOpenMenu={(r) => setMenuTarget(r)} />}
  {section === 'customers' && <AdminCustomers />}
  {section === 'orders' && <AdminOrders />}
  {section === 'payments' && <AdminPayments />}
@@ -112,6 +121,8 @@ export function AdminApp() {
  {section === 'birthdays' && <AdminBirthdays />}
  {section === 'promos' && <AdminPromos />}
  {section === 'reports' && <AdminReports />}
+ </>
+ )}
  </DashboardShell>
  );
 }
@@ -163,7 +174,7 @@ function AdminDashboard() {
  );
 }
 
-function AdminRestaurants() {
+function AdminRestaurants({ onOpenMenu }: { onOpenMenu: (r: RestaurantListItem) => void }) {
  const [items, setItems] = useState<RestaurantListItem[]>([]);
  const [loading, setLoading] = useState(true);
  const [q, setQ] = useState('');
@@ -171,7 +182,6 @@ function AdminRestaurants() {
  const [rejectTarget, setRejectTarget] = useState<RestaurantListItem | null>(null);
  const [rejectReason, setRejectReason] = useState('');
  const [showAdd, setShowAdd] = useState(false);
- const [menuTarget, setMenuTarget] = useState<RestaurantListItem | null>(null);
 
  // Add restaurant form state
  const [newName, setNewName] = useState('');
@@ -394,7 +404,7 @@ function AdminRestaurants() {
  <Button size="sm" variant="outline" onClick={() => openEdit(r)}>
  <Pencil className="w-3 h-3 mr-1" /> Edit
  </Button>
- <Button size="sm" variant="outline" onClick={() => setMenuTarget(r)}>
+ <Button size="sm" variant="outline" onClick={() => onOpenMenu(r)}>
  <UtensilsCrossed className="w-3 h-3 mr-1" /> Menu
  </Button>
  {r.status === 'PENDING_APPROVAL' && (
@@ -593,9 +603,6 @@ function AdminRestaurants() {
  }}
  />
 
- {/* Menu Management Dialog */}
- {menuTarget && <AdminMenuManagement restaurant={menuTarget} onClose={() => setMenuTarget(null)} />}
-
  {/* Reject Dialog */}
  <Dialog open={!!rejectTarget} onOpenChange={(o) => !o && setRejectTarget(null)}>
  <DialogContent>
@@ -627,11 +634,12 @@ function AdminRestaurants() {
 // Menu Management dialog — admin adds/edits/deletes menu categories + items
 function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantListItem; onClose: () => void }) {
  interface MenuCat { id: string; name: string; displayOrder: number; items: MenuItm[] }
- interface MenuItm { id: string; name: string; description: string | null; price: number; isVeg: boolean; availability: string; imageUrl: string | null; displayOrder: number }
+ interface MenuItm { id: string; name: string; description: string | null; price: number; isVeg: boolean; availability: string; imageUrl: string | null; displayOrder: number; prepTimeMinutes?: number }
  const [menu, setMenu] = useState<MenuCat[]>([]);
  const [loading, setLoading] = useState(true);
  const [newCatName, setNewCatName] = useState('');
- const [showItemForm, setShowItemForm] = useState<string | null>(null); // category ID or null
+ // Item form now lives in a Dialog (was inline before)
+ const [showItemForm, setShowItemForm] = useState(false);
  const [editingItem, setEditingItem] = useState<MenuItm | null>(null);
 
  // New item form state
@@ -687,7 +695,7 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  toast.success('Item added');
  }
  setItemName(''); setItemPrice(''); setItemDesc(''); setItemVeg(true); setItemCatId(''); setItemImageUrl(null);
- setShowItemForm(null); setEditingItem(null);
+ setShowItemForm(false); setEditingItem(null);
  load();
  } catch (e) { toastApiError(e, 'Failed'); }
  };
@@ -700,7 +708,7 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  setItemVeg(item.isVeg);
  setItemCatId(catId);
  setItemImageUrl(item.imageUrl || null);
- setShowItemForm(catId);
+ setShowItemForm(true);
  };
 
  const deleteItem = async (id: string) => {
@@ -711,47 +719,158 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  } catch (e) { toastApiError(e, 'Failed'); }
  };
 
+ // Toggle item availability via the dedicated PATCH endpoint
+ const toggleAvailability = async (item: MenuItm) => {
+ const next = item.availability === 'AVAILABLE' ? 'UNAVAILABLE' : 'AVAILABLE';
+ try {
+ await api.patch(`/api/v1/menu/items/${item.id}/availability`, { availability: next });
+ load();
+ } catch (e) { toastApiError(e, 'Failed'); }
+ };
+
+ const openNewItemForm = (catId: string) => {
+ setEditingItem(null);
+ setItemName(''); setItemPrice(''); setItemDesc(''); setItemVeg(true); setItemImageUrl(null);
+ setItemCatId(catId);
+ setShowItemForm(true);
+ };
+
+ const totalItems = menu.reduce((sum, c) => sum + c.items.length, 0);
+
  return (
- <Dialog open={true} onOpenChange={(o) => { if (!o) onClose(); }}>
- <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
- <DialogHeader>
- <DialogTitle>Menu — {restaurant.name}</DialogTitle>
- </DialogHeader>
-
- {loading ? (
- <div className="text-sm text-slate-500">Loading menu…</div>
- ) : (
  <div className="space-y-4">
- {/* Add category */}
- <div className="flex gap-2">
- <Input placeholder="New category name (e.g. Starters)" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} className="flex-1" />
- <Button size="sm" variant="outline" onClick={addCategory}>Add category</Button>
+ {/* ── Context card: breadcrumb + title + description ── */}
+ <Card>
+ <CardContent className="p-4">
+ <button onClick={onClose} className="flex items-center text-slate-500 hover:text-slate-800 text-sm mb-2">
+ <ArrowLeft className="w-4 h-4 mr-1" /> Restaurants
+ </button>
+ <div className="flex items-center gap-2">
+ <UtensilsCrossed className="w-5 h-5 text-orange-500" />
+ <h1 className="text-xl font-semibold text-slate-800">Menu — {restaurant.name}</h1>
  </div>
+ <p className="text-sm text-slate-500 mt-1">Manage categories and items for this restaurant.</p>
+ </CardContent>
+ </Card>
 
- {/* Categories with items */}
- {menu.length === 0 ? (
- <EmptyState title="No menu categories yet — add one above" />
- ) : (
- menu.map((cat) => (
- <Card key={cat.id}>
- <CardHeader className="pb-2">
+ {/* ── Categories card: chips + add category ── */}
+ <Card>
+ <CardHeader className="pb-3">
  <div className="flex items-center justify-between">
- <CardTitle className="text-sm">{cat.name} ({cat.items.length})</CardTitle>
- <div className="flex gap-1">
- <Button size="sm" variant="ghost" className="text-orange-600" onClick={() => { setShowItemForm(showItemForm === cat.id ? null : cat.id); setItemCatId(cat.id); setEditingItem(null); setItemName(''); setItemPrice(''); setItemDesc(''); setItemImageUrl(null); }}>
- <Plus className="w-3 h-3 mr-1" /> Add item
- </Button>
- <Button size="sm" variant="ghost" className="text-red-600 h-7 w-7 p-0" onClick={() => deleteCategory(cat.id)}>
- <XCircle className="w-3.5 h-3.5" />
+ <div>
+ <CardTitle className="text-base">Categories</CardTitle>
+ <p className="text-xs text-slate-500 mt-0.5">{menu.length} total</p>
+ </div>
+ <div className="flex gap-2 items-center">
+ <Input placeholder="New category name (e.g. Starters)" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} className="w-56 h-8 text-sm" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCategory(); } }} />
+ <Button size="sm" className="bg-orange-500 hover:bg-orange-600" onClick={addCategory}>
+ <Plus className="w-3.5 h-3.5 mr-1" /> Add category
  </Button>
  </div>
  </div>
  </CardHeader>
- <CardContent className="pt-0">
- {/* Inline item form */}
- {showItemForm === cat.id && (
- <form onSubmit={addItem} className="mb-3 p-3 bg-slate-50 rounded-lg space-y-2">
- <p className="text-xs font-medium text-slate-600">{editingItem ? 'Edit item' : 'New item'}</p>
+ <CardContent>
+ {loading ? (
+ <p className="text-sm text-slate-500">Loading…</p>
+ ) : menu.length === 0 ? (
+ <p className="text-xs text-slate-400 py-2">No categories yet — add one above.</p>
+ ) : (
+ <div className="flex flex-wrap gap-2">
+ {menu.map((cat) => (
+ <div key={cat.id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-full pl-3 pr-1.5 py-1.5">
+ <span className="text-sm font-medium text-slate-700">{cat.name}</span>
+ <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">{cat.items.length} items</span>
+ <button className="text-slate-400 hover:text-red-600 p-0.5" onClick={() => deleteCategory(cat.id)} aria-label={`Delete ${cat.name} category`}>
+ <XCircle className="w-3.5 h-3.5" />
+ </button>
+ </div>
+ ))}
+ </div>
+ )}
+ </CardContent>
+ </Card>
+
+ {/* ── Items card: grouped by category ── */}
+ <Card>
+ <CardHeader className="pb-3">
+ <CardTitle className="text-base">Items</CardTitle>
+ <p className="text-xs text-slate-500 mt-0.5">Grouped by category. Toggle availability with the switch.</p>
+ </CardHeader>
+ <CardContent>
+ {loading ? (
+ <p className="text-sm text-slate-500">Loading…</p>
+ ) : totalItems === 0 && menu.length === 0 ? (
+ <EmptyState title="No items yet" message="Add a category above, then add items to it." />
+ ) : (
+ <div className="space-y-5">
+ {menu.map((cat) => (
+ <div key={cat.id}>
+ {/* Category section header */}
+ <div className="flex items-center justify-between mb-2">
+ <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{cat.name}</h3>
+ <Button size="sm" variant="outline" className="h-7" onClick={() => openNewItemForm(cat.id)}>
+ <Plus className="w-3 h-3 mr-1" /> Add item
+ </Button>
+ </div>
+ {/* Items list */}
+ {cat.items.length === 0 ? (
+ <p className="text-xs text-slate-400 py-2 pl-1">No items in this category</p>
+ ) : (
+ <div className="divide-y divide-slate-100 border border-slate-100 rounded-lg overflow-hidden">
+ {cat.items.map((item) => (
+ <div key={item.id} className="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-slate-50">
+ {/* Veg indicator */}
+ <span className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center shrink-0 ${item.availability === 'AVAILABLE' ? (item.isVeg ? 'border-green-500' : 'border-red-500') : 'border-slate-300'}`}>
+ <span className={`w-1.5 h-1.5 rounded-full ${item.availability === 'AVAILABLE' ? (item.isVeg ? 'bg-green-500' : 'bg-red-500') : 'bg-slate-300'}`} />
+ </span>
+ {/* Image thumbnail */}
+ {item.imageUrl ? (
+ // eslint-disable-next-line @next/next/no-img-element
+ <img src={item.imageUrl} alt={item.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+ ) : (
+ <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-orange-400 text-sm font-semibold shrink-0">
+ {item.name.charAt(0)}
+ </div>
+ )}
+ {/* Name + description */}
+ <div className="flex-1 min-w-0">
+ <p className="text-sm font-medium text-slate-800 truncate">{item.name}</p>
+ <p className="text-xs text-slate-500 truncate">{item.description || '—'}{item.prepTimeMinutes ? ` · ${item.prepTimeMinutes} min` : ''}</p>
+ </div>
+ {/* Price */}
+ <p className="text-sm font-semibold text-slate-800 shrink-0">₹{item.price}</p>
+ {/* Status badge */}
+ <Badge variant="secondary" className={`text-[10px] shrink-0 ${item.availability === 'AVAILABLE' ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+ {item.availability === 'AVAILABLE' ? 'Available' : 'Unavailable'}
+ </Badge>
+ {/* Availability toggle */}
+ <Switch checked={item.availability === 'AVAILABLE'} onCheckedChange={() => toggleAvailability(item)} />
+ {/* Edit pencil */}
+ <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-slate-700" onClick={() => editItem(item, cat.id)} aria-label="Edit item">
+ <Pencil className="w-3.5 h-3.5" />
+ </Button>
+ {/* Delete */}
+ <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteItem(item.id)} aria-label="Delete item">
+ <Trash2 className="w-3.5 h-3.5" />
+ </Button>
+ </div>
+ ))}
+ </div>
+ )}
+ </div>
+ ))}
+ </div>
+ )}
+ </CardContent>
+ </Card>
+
+ {/* ── Item form Dialog (moved from inline) ── */}
+ <Dialog open={showItemForm} onOpenChange={(o) => { setShowItemForm(o); if (!o) setEditingItem(null); }}>
+ <DialogContent className="max-w-lg">
+ <DialogHeader>
+ <DialogTitle>{editingItem ? 'Edit item' : 'New item'}</DialogTitle>
+ </DialogHeader>
+ <form onSubmit={addItem} className="space-y-3">
  <LogoUploader value={itemImageUrl} onChange={setItemImageUrl} fallbackLetter={itemName || 'M'} size={64} label="Item photo" hint="Optional. Shown to customers next to the item name. PNG / JPG / WebP, under 4 MB." />
  <div className="grid grid-cols-3 gap-2">
  <Input placeholder="Item name" value={itemName} onChange={(e) => setItemName(e.target.value)} required className="col-span-2" />
@@ -763,54 +882,14 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
  <input type="checkbox" checked={itemVeg} onChange={(e) => setItemVeg(e.target.checked)} /> Veg
  </label>
  <div className="ml-auto flex gap-2">
- <Button type="button" size="sm" variant="ghost" onClick={() => { setShowItemForm(null); setEditingItem(null); }}>Cancel</Button>
+ <Button type="button" size="sm" variant="ghost" onClick={() => { setShowItemForm(false); setEditingItem(null); }}>Cancel</Button>
  <Button type="submit" size="sm" className="bg-orange-500 hover:bg-orange-600">{editingItem ? 'Save' : 'Add item'}</Button>
  </div>
  </div>
  </form>
- )}
- {/* Items list */}
- {cat.items.length === 0 ? (
- <p className="text-xs text-slate-400 py-2">No items in this category</p>
- ) : (
- <div className="space-y-1">
- {cat.items.map((item) => (
- <div key={item.id} className="flex items-center justify-between p-2 rounded hover:bg-slate-50">
- <div className="flex items-center gap-2">
- <span className={`w-2 h-2 rounded-full ${item.isVeg ? 'bg-green-500' : 'bg-red-500'}`} />
- {item.imageUrl ? (
- // eslint-disable-next-line @next/next/no-img-element
- <img src={item.imageUrl} alt={item.name} className="w-9 h-9 rounded-lg object-cover shrink-0" />
- ) : (
- <div className="w-9 h-9 rounded-lg bg-orange-50 flex items-center justify-center text-orange-400 text-sm font-semibold shrink-0">
- {item.name.charAt(0)}
- </div>
- )}
- <div>
- <p className="text-sm font-medium text-slate-700">{item.name}</p>
- <p className="text-xs text-slate-400">₹{item.price} • {item.availability === 'AVAILABLE' ? 'Available' : 'Unavailable'}</p>
- </div>
- </div>
- <div className="flex gap-1">
- <Button size="sm" variant="ghost" className="h-7" onClick={() => editItem(item, cat.id)}>
- <Eye className="w-3 h-3" />
- </Button>
- <Button size="sm" variant="ghost" className="text-red-600 h-7" onClick={() => deleteItem(item.id)}>
- <XCircle className="w-3 h-3" />
- </Button>
- </div>
- </div>
- ))}
- </div>
- )}
- </CardContent>
- </Card>
- ))
- )}
- </div>
- )}
  </DialogContent>
  </Dialog>
+ </div>
  );
 }
 
@@ -1242,6 +1321,7 @@ function AdminPromos() {
  }
  const [items, setItems] = useState<PromoBanner[]>([]);
  const [loading, setLoading] = useState(true);
+ const [showAdd, setShowAdd] = useState(false);
  const [title, setTitle] = useState('');
  const [displayOrder, setDisplayOrder] = useState('0');
  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -1292,6 +1372,7 @@ function AdminPromos() {
  isActive: true,
  });
  setTitle(''); setDisplayOrder('0'); setImageDataUrl(null); setPreviewUrl(null);
+ setShowAdd(false);
  toast.success('Promo banner uploaded');
  load();
  } catch (e) {
@@ -1314,17 +1395,73 @@ function AdminPromos() {
  await api.delete(`/api/v1/admin/promo-banners/${id}`);
  toast.success('Banner deleted');
  load();
-} catch (e) { toastApiError(e, 'Failed'); }
+ } catch (e) { toastApiError(e, 'Failed'); }
  };
+
+ const sorted = [...items].sort((a, b) => a.displayOrder - b.displayOrder);
+ const activeCount = items.filter((b) => b.isActive).length;
 
  return (
  <div className="space-y-4">
+ {/* Header row: title + stats on left, New banner button on right */}
+ <div className="flex items-start justify-between gap-3 flex-wrap">
  <PageHeader
- title="Promo Banners"
- subtitle="Upload 4–5 banner images for the customer home carousel. Slides auto-rotate every 5 seconds. Recommended aspect ratio: 16:5."
+ title="Promo banners"
+ subtitle={`${items.length} banner${items.length === 1 ? '' : 's'} · ${activeCount} active`}
  />
- <Card>
- <CardContent className="p-4">
+ <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => { setShowAdd(true); setTitle(''); setDisplayOrder('0'); setPreviewUrl(null); setImageDataUrl(null); }}>
+ <Plus className="w-4 h-4 mr-1" /> New banner
+ </Button>
+ </div>
+
+ {loading ? (
+ <div className="text-sm text-slate-500">Loading…</div>
+ ) : sorted.length === 0 ? (
+ <EmptyState title="No promo banners yet" message="Click 'New banner' to upload one." />
+ ) : (
+ /* 3-column card grid (matches the reference layout) */
+ <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+ {sorted.map((b) => (
+ <Card key={b.id} className="overflow-hidden">
+ {/* Preview area with overlaid badges */}
+ <div className="relative w-full aspect-[16/5] bg-slate-100">
+ {/* eslint-disable-next-line @next/next/no-img-element */}
+ <img src={resolveUrl(b.imageUrl)} alt={b.title || 'Promo'} className="w-full h-full object-cover" />
+ {/* Order badge (top-left) */}
+ <span className="absolute top-2 left-2 bg-white/95 backdrop-blur text-slate-700 text-[10px] font-semibold px-2 py-0.5 rounded-full shadow-sm">
+ Order #{b.displayOrder}
+ </span>
+ {/* Active status badge (top-right) */}
+ <span className={`absolute top-2 right-2 text-[10px] font-semibold px-2 py-0.5 rounded-full shadow-sm ${b.isActive ? 'bg-green-500 text-white' : 'bg-slate-600 text-white'}`}>
+ {b.isActive ? 'Active' : 'Hidden'}
+ </span>
+ </div>
+ {/* Title + image url hint */}
+ <CardContent className="p-3 space-y-2">
+ <p className="text-sm font-semibold text-slate-800 truncate">{b.title || 'Untitled banner'}</p>
+ <p className="text-[10px] text-slate-400 truncate">{b.imageUrl}</p>
+ {/* Footer: Live toggle (left) + delete (right) */}
+ <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+ <label className="flex items-center gap-2 cursor-pointer">
+ <Switch checked={b.isActive} onCheckedChange={() => toggle(b)} />
+ <span className={`text-xs font-medium ${b.isActive ? 'text-orange-600' : 'text-slate-500'}`}>Live</span>
+ </label>
+ <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0" onClick={() => remove(b.id)} aria-label="Delete banner">
+ <Trash2 className="w-4 h-4" />
+ </Button>
+ </div>
+ </CardContent>
+ </Card>
+ ))}
+ </div>
+ )}
+
+ {/* New banner dialog */}
+ <Dialog open={showAdd} onOpenChange={setShowAdd}>
+ <DialogContent className="max-w-lg">
+ <DialogHeader>
+ <DialogTitle>New promo banner</DialogTitle>
+ </DialogHeader>
  <form onSubmit={create} className="space-y-3">
  <div className="space-y-1.5">
  <Label htmlFor="promo-file">Banner image <span className="text-slate-400 text-xs">(JPG / PNG, &lt; 3 MB)</span></Label>
@@ -1335,6 +1472,7 @@ function AdminPromos() {
  />
  {previewUrl && (
  <div className="mt-2 relative w-full aspect-[16/5] rounded-lg overflow-hidden bg-slate-100">
+ {/* eslint-disable-next-line @next/next/no-img-element */}
  <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
  </div>
  )}
@@ -1349,46 +1487,15 @@ function AdminPromos() {
  <Input id="promo-order" type="number" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} />
  </div>
  </div>
+ <DialogFooter>
+ <Button type="button" variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
  <Button type="submit" disabled={uploading || !imageDataUrl} className="bg-orange-500 hover:bg-orange-600">
  {uploading ? 'Uploading…' : 'Upload banner'}
  </Button>
+ </DialogFooter>
  </form>
- </CardContent>
- </Card>
- {loading ? (
- <div className="text-sm text-slate-500">Loading…</div>
- ) : items.length === 0 ? (
- <EmptyState title="No promo banners yet — upload one above" />
- ) : (
- <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
- {items.map((b) => (
- <Card key={b.id}>
- <CardContent className="p-3 space-y-2">
- <div className="relative w-full aspect-[16/5] rounded-lg overflow-hidden bg-slate-100">
- <img src={resolveUrl(b.imageUrl)} alt={b.title || 'Promo'} className="w-full h-full object-cover" />
- </div>
- <div className="flex items-center justify-between text-xs">
- <div>
- <p className="font-medium text-slate-700">{b.title || '(no title)'}</p>
- <p className="text-slate-500">Order: {b.displayOrder}</p>
- </div>
- <Badge className={b.isActive ? 'text-green-700 bg-green-50' : 'text-slate-700 bg-slate-100'}>
- {b.isActive ? 'Active' : 'Hidden'}
- </Badge>
- </div>
- <div className="flex gap-2">
- <Button size="sm" variant="outline" className="flex-1" onClick={() => toggle(b)}>
- {b.isActive ? 'Hide' : 'Show'}
- </Button>
- <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => remove(b.id)}>
- <XCircle className="w-3.5 h-3.5" />
- </Button>
- </div>
- </CardContent>
- </Card>
- ))}
- </div>
- )}
+ </DialogContent>
+ </Dialog>
  </div>
  );
 }
