@@ -5,7 +5,7 @@ import type { User } from '../types';
 interface AuthState {
   user: User | null; loading: boolean;
   login: (phone: string, password: string) => Promise<User>;
-  register: (input: { fullName: string; phone: string; password: string; otp?: string; dateOfBirth?: string; anniversaryDate?: string }) => Promise<User>;
+  register: (input: { fullName: string; phone: string; password: string; dateOfBirth?: string; anniversaryDate?: string }) => Promise<User>;
   logout: () => Promise<void>;
   initAuth: () => Promise<void>;
 }

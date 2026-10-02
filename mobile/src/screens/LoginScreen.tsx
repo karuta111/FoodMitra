@@ -19,7 +19,7 @@ import { colors, radius, shadow } from '../theme/colors';
 import { OTPWidget } from '@msg91comm/sendotp-react-native';
 import { useEffect } from 'react';
 
-type Screen = 'login' | 'register_details' | 'register_otp' | 'forgot_phone' | 'forgot_reset';
+type Screen = 'login' | 'register_details' | 'forgot_phone' | 'forgot_reset';
 
 export default function LoginScreen() {
   const { login, register } = useAuthStore();
@@ -34,7 +34,6 @@ export default function LoginScreen() {
   const [otp, setOtp] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [anniversaryDate, setAnniversaryDate] = useState('');
-  const [demoOtp, setDemoOtp] = useState<string | null>(null);
   const [otpCooldown, setOtpCooldown] = useState(0);
   const [error, setError] = useState('');
   const [otpReqId, setOtpReqId] = useState<string | null>(null);
@@ -57,7 +56,7 @@ export default function LoginScreen() {
   const resetState = () => {
     setFullName(''); setPhone(''); setPassword(''); setOtp('');
     setDateOfBirth(''); setAnniversaryDate('');
-    setDemoOtp(null); setError(''); setScreen('login');
+    setOtpSent(false); setOtpReqId(null); setError(''); setScreen('login');
   };
 
   // ── Login ──────────────────────────────────────────────────────────────────
@@ -173,23 +172,22 @@ export default function LoginScreen() {
     }
   };
 
-  // ── Register step 2: verify OTP ───────────────────────────────────────────
-  const handleRegister = async () => {
-    if (otp.length !== 6) { setError('Enter the 6-digit OTP'); return; }
-    setLoading(true); setError('');
-    try { await register({ fullName, phone, password, otp, dateOfBirth, anniversaryDate }); }
-    catch (e) { setError(e instanceof ApiError ? e.message : 'Registration failed'); }
-    finally { setLoading(false); }
-  };
-
-  // ── Forgot: send OTP ──────────────────────────────────────────────────────
+  // ── Forgot: send OTP via MSG91 widget ─────────────────────────────────────
   const sendForgotOtp = async () => {
     if (phone.length < 10) { setError('Enter a valid 10-digit number'); return; }
-    setLoading(true); setError(''); setDemoOtp(null);
+    setLoading(true); setError('');
     try {
-      const norm = `+91${phone.replace(/\D/g, '').slice(-10)}`;
-      const res = await api.post<{ message: string; otp?: string }>('/auth/forgot-password', { phone: norm });
-      setDemoOtp(res.otp ?? null);
+      const identifier = `91${phone}`;
+      const response = await OTPWidget.sendOTP({ identifier });
+      if (response?.type !== 'success') {
+        setError(response?.message || 'Failed to send OTP');
+        return;
+      }
+      const reqId = response.message;
+      if (!reqId) { setError('OTP request ID was not returned'); return; }
+      setOtpReqId(reqId);
+      setOtp('');
+      setOtpSent(true);
       startCooldown();
       setScreen('forgot_reset');
     }
@@ -197,14 +195,24 @@ export default function LoginScreen() {
     finally { setLoading(false); }
   };
 
-  // ── Forgot: reset password ────────────────────────────────────────────────
+  // ── Forgot: verify OTP then reset password ────────────────────────────────
   const handleResetPassword = async () => {
+    if (!otpSent) { setError('Please verify your OTP first'); return; }
+    if (otp.length !== 4) { setError('Enter the 4-digit OTP'); return; }
     if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
+    if (!otpReqId) { setError('OTP session expired. Please request a new OTP.'); return; }
     setLoading(true); setError('');
     try {
+      // Verify OTP client-side with MSG91 first
+      const verifyResponse = await OTPWidget.verifyOTP({ reqId: otpReqId, otp });
+      if (verifyResponse?.type !== 'success') {
+        setError(verifyResponse?.message || 'Invalid OTP');
+        return;
+      }
+      // OTP verified — reset password on backend (no OTP sent to backend)
       const norm = `+91${phone.replace(/\D/g, '').slice(-10)}`;
-      await api.post('/auth/reset-password', { phone: norm, password, ...(otp ? { otp } : {}) });
-      setOtp(''); setPassword(''); setDemoOtp(null);
+      await api.post('/auth/reset-password', { phone: norm, password });
+      setOtp(''); setPassword(''); setOtpSent(false); setOtpReqId(null);
       setError('');
       setScreen('login');
     }
@@ -215,7 +223,6 @@ export default function LoginScreen() {
   const getTitle = () => ({
     login: 'Login',
     register_details: 'Create account',
-    register_otp: 'Verify mobile',
     forgot_phone: 'Forgot password',
     forgot_reset: 'Reset password',
   }[screen]);
@@ -223,9 +230,8 @@ export default function LoginScreen() {
   const getSubtitle = () => ({
     login: 'Get access to your Orders, Wishlist and Recommendations',
     register_details: 'Create a new FoodMitra account',
-    register_otp: `Enter the OTP sent to +91 ${phone}`,
     forgot_phone: 'Enter your registered mobile number',
-    forgot_reset: `Enter the OTP sent to +91 ${phone} and your new password`,
+    forgot_reset: `Enter the OTP sent to +91 ${phone} and set your new password`,
   }[screen]);
 
   return (
@@ -500,32 +506,18 @@ export default function LoginScreen() {
             </>
           )}
 
-          {/* ── FORGOT STEP 2: OTP + new password ────────────────────── */}
+          {/* ── FORGOT STEP 2: verify OTP + new password ─────────────── */}
           {screen === 'forgot_reset' && (
             <>
-              {demoOtp && (
-                <View style={s.otpBox}>
-                  <Text style={s.otpBoxLabel}>Demo OTP</Text>
-                  <Text style={s.otpBoxCode}>{demoOtp}</Text>
-                  <Text style={s.otpBoxNote}>In production this would be sent via SMS</Text>
-                </View>
-              )}
-              {!demoOtp && (
-                <View style={s.successBox}>
-                  <Text style={s.successText}>✓ Phone verified. Set your new password below.</Text>
-                </View>
-              )}
-              {demoOtp && (
-                <LabeledInput
-                  label="Enter 4-digit OTP"
-                  value={otp}
-                  onChange={(t: string) => setOtp(t.replace(/\D/g, '').slice(0, 4))}
-                  placeholder="123456"
-                  keyboardType="numeric"
-                  maxLength={4}
-                  style={{ letterSpacing: 8, fontSize: 20, fontWeight: '700' }}
-                />
-              )}
+              <LabeledInput
+                label="Enter 4-digit OTP"
+                value={otp}
+                onChange={(t: string) => setOtp(t.replace(/\D/g, '').slice(0, 4))}
+                placeholder="1234"
+                keyboardType="numeric"
+                maxLength={4}
+                style={{ letterSpacing: 8, fontSize: 20, fontWeight: '700' }}
+              />
               <PasswordField
                 label="New password"
                 value={password}
@@ -535,7 +527,22 @@ export default function LoginScreen() {
                 placeholder="min 8 characters"
               />
               {error ? <ErrorBox msg={error} /> : null}
-              <PrimaryBtn title="RESET PASSWORD" loading={loading} onPress={handleResetPassword} disabled={password.length < 8} />
+              <PrimaryBtn
+                title="VERIFY OTP & RESET"
+                loading={loading}
+                onPress={handleResetPassword}
+                disabled={otp.length !== 4 || password.length < 8}
+              />
+              <View style={s.otpActions}>
+                <TouchableOpacity
+                  disabled={otpCooldown > 0 || loading}
+                  onPress={sendForgotOtp}
+                >
+                  <Text style={[s.otpResend, otpCooldown > 0 && s.otpResendDisabled]}>
+                    {otpCooldown > 0 ? `Resend OTP in ${otpCooldown}s` : 'Resend OTP'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </>
           )}
 
