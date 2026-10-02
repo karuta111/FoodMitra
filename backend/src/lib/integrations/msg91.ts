@@ -14,10 +14,8 @@
 
 const MSG91_VERIFY_URL = 'https://control.msg91.com/api/v5/widget/verifyAccessToken';
 const AUTH_KEY = process.env.MSG91_AUTH_KEY || '';
-const WIDGET_ENABLED = process.env.OTP_USE_MSG91_WIDGET === 'true' && !!AUTH_KEY;
-
 export function isMsg91Enabled(): boolean {
-  return WIDGET_ENABLED;
+  return process.env.OTP_USE_MSG91_WIDGET === 'true' && !!(process.env.MSG91_AUTH_KEY || AUTH_KEY);
 }
 
 export interface WidgetVerifyResult {
@@ -41,7 +39,7 @@ export class Msg91Client {
    * Verify the access token returned by the MSG91 OTP widget.
    */
   static async verifyWidgetAccessToken(accessToken: string): Promise<WidgetVerifyResult> {
-    if (!WIDGET_ENABLED) {
+    if (!isMsg91Enabled()) {
       throw new Error('MSG91 widget not configured');
     }
     if (!accessToken || accessToken.length < 20) {

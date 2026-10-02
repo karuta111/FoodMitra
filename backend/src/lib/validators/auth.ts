@@ -14,7 +14,7 @@ export const passwordSchema = z.string().min(8, 'Password must be at least 8 cha
 
 export const otpSchema = z
   .string()
-  .regex(/^\d{6}$/, 'Enter the 6-digit OTP');
+  .regex(/^\d{4,6}$/, 'Enter a valid OTP');
 
 // Signup flow — when MSG91 widget is enabled, the phone is pre-verified via the
 // widget flow (POST /auth/verify-widget-token) before /auth/register is called,
@@ -27,13 +27,13 @@ export const registerSchema = z.object({
   password: passwordSchema,
   otp: otpSchema.optional(),
   dateOfBirth: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date (YYYY-MM-DD)')
     .optional()
-    .transform((s) => s ? new Date(`${s}T00:00:00.000Z`) : undefined),
+    .refine((s) => !s || /^\d{4}-\d{2}-\d{2}$/.test(s), 'Enter a valid date (YYYY-MM-DD)')
+    .transform((s) => (s && s.trim().length > 0) ? new Date(`${s}T00:00:00.000Z`) : undefined),
   anniversaryDate: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date (YYYY-MM-DD)')
     .optional()
-    .transform((s) => s ? new Date(`${s}T00:00:00.000Z`) : undefined),
+    .refine((s) => !s || /^\d{4}-\d{2}-\d{2}$/.test(s), 'Enter a valid date (YYYY-MM-DD)')
+    .transform((s) => (s && s.trim().length > 0) ? new Date(`${s}T00:00:00.000Z`) : undefined),
 });
 
 // Login = mobile + password (no email)

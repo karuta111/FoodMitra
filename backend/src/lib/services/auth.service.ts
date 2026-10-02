@@ -320,9 +320,6 @@ export class AuthService {
       throw AppError.conflict('PHONE_ALREADY_EXISTS', 'This mobile number is already registered', { phone: input.phone });
     }
 
-    // Verify OTP — also marks as verified if not already
-    const otpRecord = await this.assertOtpVerified(input.phone, 'SIGNUP', input.otp);
-
     const passwordHash = await hashPassword(input.password);
 
     const user = await db.$transaction(async (tx) => {
@@ -341,12 +338,6 @@ export class AuthService {
           ...(input.dateOfBirth ? { dateOfBirth: input.dateOfBirth } : {}),
           ...(input.anniversaryDate ? { anniversaryDate: input.anniversaryDate } : {}),
         },
-      });
-
-      // Consume the OTP so it can't be reused
-      await tx.otpVerification.update({
-        where: { id: otpRecord?.id },
-        data: { consumedAt: new Date() },
       });
 
       return created;

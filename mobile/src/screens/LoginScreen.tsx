@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/auth';
 import { ApiError, api } from '../api/client';
 import { colors, radius, shadow } from '../theme/colors';
+import { OTPWidget } from '@msg91comm/sendotp-react-native';
+import { useEffect } from 'react';
 
 type Screen = 'login' | 'register_details' | 'register_otp' | 'forgot_phone' | 'forgot_reset';
 
@@ -35,6 +37,15 @@ export default function LoginScreen() {
   const [demoOtp, setDemoOtp] = useState<string | null>(null);
   const [otpCooldown, setOtpCooldown] = useState(0);
   const [error, setError] = useState('');
+  const [otpReqId, setOtpReqId] = useState<string | null>(null);
+  const [otpSent, setOtpSent] = useState(false);
+
+  const widgetId = "36697a71494b353338303634";
+  const tokenAuth = "575533Tzsl0DbrFc6ab802dfP1";
+
+  useEffect(() => {
+    OTPWidget.initializeWidget(widgetId, tokenAuth); //Widget initialization
+  }, [])
 
   const startCooldown = () => {
     setOtpCooldown(60);
@@ -61,19 +72,105 @@ export default function LoginScreen() {
 
   // ── Register step 1: send OTP ──────────────────────────────────────────────
   const sendRegisterOtp = async () => {
-    if (!fullName.trim()) { setError('Enter your full name'); return; }
-    if (phone.length < 10) { setError('Enter a valid 10-digit number'); return; }
-    if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
-    setLoading(true); setError(''); setDemoOtp(null);
-    try {
-      const norm = `+91${phone.replace(/\D/g, '').slice(-10)}`;
-      const res = await api.post<{ message: string; otp?: string }>('/auth/send-otp', { phone: norm, purpose: 'SIGNUP' });
-      setDemoOtp(res.otp ?? null);
-      startCooldown();
-      setScreen('register_otp');
+    if (!fullName.trim()) {
+      setError('Enter your full name');
+      return;
     }
-    catch (e) { setError(e instanceof ApiError ? e.message : 'Failed to send OTP'); }
-    finally { setLoading(false); }
+
+    if (phone.length !== 10) {
+      setError('Enter a valid 10-digit number');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // MSG91 expects country code WITHOUT +
+      const identifier = `91${phone}`;
+
+      const response = await OTPWidget.sendOTP({
+        identifier,
+      });
+
+      console.log('MSG91 sendOTP:', response);
+
+      if (response?.type !== 'success') {
+        setError(response?.message || 'Failed to send OTP');
+        return;
+      }
+
+      // MSG91 returns the request ID in `message`
+      const reqId = response.message;
+
+      if (!reqId) {
+        setError('OTP request ID was not returned');
+        return;
+      }
+
+      setOtpReqId(reqId);
+      setOtp('');
+      setOtpSent(true);
+      startCooldown();
+
+    } catch (e) {
+      console.error('MSG91 send OTP error:', e);
+      setError('Failed to send OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otp.length !== 4) {
+      setError('Enter the 4-digit OTP');
+      return;
+    }
+
+    if (!otpReqId) {
+      setError('OTP session expired. Please request a new OTP.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await OTPWidget.verifyOTP({
+        reqId: otpReqId,
+        otp,
+      });
+
+      console.log('MSG91 verifyOTP:', response);
+
+      if (response?.type !== 'success') {
+        setError(response?.message || 'Invalid OTP');
+        return;
+      }
+
+      // OTP verified successfully on client with MSG91
+      console.log('OTP VERIFIED');
+
+      // Complete registration on backend & update auth store (auto-navigates to Home)
+      await register({
+        fullName,
+        phone,
+        password,
+        ...(dateOfBirth ? { dateOfBirth } : {}),
+        ...(anniversaryDate ? { anniversaryDate } : {}),
+      });
+
+    } catch (e: any) {
+      console.error('MSG91 verify OTP / registration error:', e);
+      setError(e instanceof ApiError ? e.message : (e?.message || 'Invalid OTP or verification failed.'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Register step 2: verify OTP ───────────────────────────────────────────
@@ -205,7 +302,7 @@ export default function LoginScreen() {
           )}
 
           {/* ── REGISTER STEP 1 ───────────────────────────────────────── */}
-          {screen === 'register_details' && (
+          {/* {screen === 'register_details' && (
             <>
               <LabeledInput
                 label="Full name"
@@ -241,10 +338,10 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
             </>
-          )}
+          )} */}
 
           {/* ── REGISTER STEP 2: OTP ──────────────────────────────────── */}
-          {screen === 'register_otp' && (
+          {/* {screen === 'register_otp' && (
             <>
               {demoOtp && (
                 <View style={s.otpBox}>
@@ -254,16 +351,16 @@ export default function LoginScreen() {
                 </View>
               )}
               <LabeledInput
-                label="Enter 6-digit OTP"
+                label="Enter 4-digit OTP"
                 value={otp}
-                onChange={(t: string) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
+                onChange={(t: string) => setOtp(t.replace(/\D/g, '').slice(0, 4))}
                 placeholder="123456"
                 keyboardType="numeric"
-                maxLength={6}
+                maxLength={4}
                 style={{ letterSpacing: 8, fontSize: 20, fontWeight: '700' }}
               />
               {error ? <ErrorBox msg={error} /> : null}
-              <PrimaryBtn title="VERIFY & CREATE ACCOUNT" loading={loading} onPress={handleRegister} disabled={otp.length !== 6} />
+              <PrimaryBtn title="VERIFY & CREATE ACCOUNT" loading={loading} onPress={handleRegister} disabled={otp.length !== 4} />
               <View style={s.otpActions}>
                 <TouchableOpacity disabled={otpCooldown > 0} onPress={async () => {
                   setLoading(true);
@@ -281,6 +378,116 @@ export default function LoginScreen() {
                   <Text style={s.otpChange}>Change number</Text>
                 </TouchableOpacity>
               </View>
+            </>
+          )} */}
+          {screen === 'register_details' && (
+            <>
+              {!otpSent ? (
+                <>
+                  <LabeledInput
+                    label="Full name"
+                    value={fullName}
+                    onChange={setFullName}
+                    placeholder="John Doe"
+                  />
+
+                  <PhoneField
+                    value={phone}
+                    onChange={setPhone}
+                  />
+
+                  <PasswordField
+                    label="Password"
+                    value={password}
+                    onChange={setPassword}
+                    show={showPassword}
+                    onToggle={() => setShowPassword(v => !v)}
+                    placeholder="min 8 characters"
+                  />
+
+                  <DateField
+                    label="Date of birth (optional)"
+                    value={dateOfBirth}
+                    onChange={setDateOfBirth}
+                  />
+
+                  <DateField
+                    label="Anniversary date (optional)"
+                    value={anniversaryDate}
+                    onChange={setAnniversaryDate}
+                  />
+
+                  {error ? <ErrorBox msg={error} /> : null}
+
+                  <PrimaryBtn
+                    title="SEND OTP"
+                    loading={loading}
+                    onPress={sendRegisterOtp}
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={s.cardSubtitle}>
+                    Enter the 4-digit OTP sent to +91 {phone}
+                  </Text>
+
+                  <LabeledInput
+                    label="Enter OTP"
+                    value={otp}
+                    onChange={(t: string) =>
+                      setOtp(t.replace(/\D/g, '').slice(0, 4))
+                    }
+                    placeholder="1234"
+                    keyboardType="numeric"
+                    maxLength={4}
+                    style={{
+                      letterSpacing: 8,
+                      fontSize: 20,
+                      fontWeight: '700',
+                    }}
+                  />
+
+                  {error ? <ErrorBox msg={error} /> : null}
+
+                  <PrimaryBtn
+                    title="VERIFY OTP"
+                    loading={loading}
+                    onPress={handleVerifyOtp}
+                    disabled={otp.length !== 4}
+                  />
+
+                  <View style={s.otpActions}>
+                    <TouchableOpacity
+                      disabled={otpCooldown > 0 || loading}
+                      onPress={sendRegisterOtp}
+                    >
+                      <Text
+                        style={[
+                          s.otpResend,
+                          otpCooldown > 0 && s.otpResendDisabled,
+                        ]}
+                      >
+                        {otpCooldown > 0
+                          ? `Resend OTP in ${otpCooldown}s`
+                          : 'Resend OTP'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => {
+                        setOtpSent(false);
+                        setOtp('');
+                        setOtpReqId(null);
+                        setError('');
+                      }}
+                    >
+                      <Text style={s.otpChange}>
+                        Change number
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </>
           )}
 
@@ -310,12 +517,12 @@ export default function LoginScreen() {
               )}
               {demoOtp && (
                 <LabeledInput
-                  label="Enter 6-digit OTP"
+                  label="Enter 4-digit OTP"
                   value={otp}
-                  onChange={(t: string) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
+                  onChange={(t: string) => setOtp(t.replace(/\D/g, '').slice(0, 4))}
                   placeholder="123456"
                   keyboardType="numeric"
-                  maxLength={6}
+                  maxLength={4}
                   style={{ letterSpacing: 8, fontSize: 20, fontWeight: '700' }}
                 />
               )}
@@ -428,7 +635,7 @@ function LabeledInput({ label, value, onChange, placeholder, keyboardType, maxLe
 
 function DateField({ label, value, onChange }: any) {
   const [show, setShow] = useState(false);
-  
+
   const handleConfirm = (event: any, selectedDate?: Date) => {
     setShow(Platform.OS === 'ios');
     if (selectedDate) {
@@ -440,8 +647,8 @@ function DateField({ label, value, onChange }: any) {
   return (
     <View style={sf.wrap}>
       <Text style={sf.label}>{label}</Text>
-      <TouchableOpacity 
-        style={sf.plainInput} 
+      <TouchableOpacity
+        style={sf.plainInput}
         onPress={() => setShow(true)}
         activeOpacity={0.7}
       >
@@ -449,7 +656,7 @@ function DateField({ label, value, onChange }: any) {
           {value || 'YYYY-MM-DD'}
         </Text>
       </TouchableOpacity>
-      
+
       {show && (
         <DateTimePicker
           value={value ? new Date(value) : new Date()}
