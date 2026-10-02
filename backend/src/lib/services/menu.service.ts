@@ -98,7 +98,29 @@ export class MenuService {
     const item = await db.menuItem.findUnique({ where: { id: itemId } });
     if (!item) throw AppError.notFound('Menu item');
     await this.assertOwnership(item.restaurantId, ctx);
-    return db.menuItem.delete({ where: { id: itemId } });
+
+    // If any past OrderItem references this menu item, we can't hard-delete without
+    // breaking order history (OrderItem_menuItemId_fkey). Instead, soft-remove:
+    // mark UNAVAILABLE so it stops showing on the menu but order snapshots stay intact.
+    const orderItemCount = await db.orderItem.count({ where: { menuItemId: itemId } });
+    if (orderItemCount > 0) {
+      const updated = await db.menuItem.update({
+        where: { id: itemId },
+        data: { availability: 'UNAVAILABLE' },
+      });
+      return {
+        action: 'unavailable' as const,
+        message: `This item appears in ${orderItemCount} past order${orderItemCount === 1 ? '' : 's'} — marked as Unavailable instead of deleted to preserve order history.`,
+        item: updated,
+      };
+    }
+
+    await db.menuItem.delete({ where: { id: itemId } });
+    return {
+      action: 'deleted' as const,
+      message: 'Item deleted.',
+      item: null,
+    };
   }
 
   static async setAvailability(itemId: string, ctx: AuthContext, availability: 'AVAILABLE' | 'UNAVAILABLE') {

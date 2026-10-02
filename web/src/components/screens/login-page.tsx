@@ -6,13 +6,11 @@ import { toastApiError } from '@/lib/toast-errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Lock, User as UserIcon, Eye, EyeOff, KeyRound, ArrowLeft } from 'lucide-react';
+import { Lock, User as UserIcon, Eye, EyeOff, KeyRound, ArrowLeft, Smartphone, ShieldCheck, UtensilsCrossed } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { triggerMsg91OtpWidget, isMsg91WidgetConfigured } from '@/lib/msg91-widget';
-import { BrandLogo } from '@/components/shared/brand-logo';
 import { PhoneInput } from '@/components/ui/phone-input';
 
 // Customer customer-mode sub-states
@@ -182,26 +180,94 @@ export function LoginPage() {
  setScreen('login');
  };
 
- return (
- <div className="min-h-screen flex flex-col bg-gradient-to-br from-orange-50 via-amber-50 to-white ">
- <header className="px-6 py-5 flex items-center justify-between border-b border-slate-200 bg-white/60 backdrop-blur">
- <BrandLogo size="md" />
- </header>
+ // Map screen → which segmented tab is active (only login + register_details are "top-level"; the
+ // OTP / forgot sub-screens inherit from their parent so the tab highlight stays sensible).
+ const isLoginTab = screen === 'login' || screen === 'forgot_phone' || screen === 'forgot_reset';
+ const isSignupTab = screen === 'register_details' || screen === 'register_otp';
 
- <div className="flex-1 flex items-center justify-center px-4 py-12">
+ return (
+ <div className="min-h-screen flex flex-col lg:flex-row bg-white">
+ {/* ───────────────────── LEFT: Branding panel (orange→red gradient) ───────────────────── */}
+ <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-orange-500 via-orange-600 to-red-600 text-white p-10 flex-col justify-between relative overflow-hidden">
+ {/* Subtle dot pattern overlay */}
+ <div
+ className="absolute inset-0 opacity-10 pointer-events-none"
+ style={{
+ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+ backgroundSize: '22px 22px',
+ }}
+ />
+ {/* Logo top-left */}
+ <div className="flex items-center gap-2.5 relative">
+ <div className="bg-white/20 backdrop-blur w-10 h-10 rounded-xl flex items-center justify-center">
+ <UtensilsCrossed className="w-5 h-5" />
+ </div>
+ <span className="font-bold text-xl">FoodMitra</span>
+ </div>
+ {/* Hero copy center */}
+ <div className="relative space-y-3 max-w-md">
+ <h1 className="text-3xl xl:text-4xl font-bold leading-tight">Good food, delivered to your door.</h1>
+ <p className="text-white/80 text-sm xl:text-base">
+ Order from your favourite restaurants across the city. Fresh, hot, and on time — every single time.
+ </p>
+ </div>
+ {/* Trust badges + footer */}
+ <div className="relative space-y-4">
+ <div className="space-y-1.5 text-sm">
+ <div className="flex items-center gap-2">
+ <UtensilsCrossed className="w-4 h-4 opacity-80" />
+ <span>7+ restaurants</span>
+ </div>
+ <div className="flex items-center gap-2">
+ <ShieldCheck className="w-4 h-4 opacity-80" />
+ <span>Secure payments</span>
+ </div>
+ </div>
+ <p className="text-xs text-white/60">© 2026 FoodMitra. All rights reserved.</p>
+ </div>
+ </div>
+
+ {/* ───────────────────── RIGHT: Form panel (white) ───────────────────── */}
+ <div className="flex-1 flex items-center justify-center p-6 lg:p-10">
  <div className="w-full max-w-md">
- <Card className="shadow-xl shadow-orange-100/50 border-orange-100 ">
- <CardHeader className="space-y-1">
- {screen !== 'login' && (
+ {/* Segmented tabs (Log in / Sign up) — only shown on the two top-level screens */}
+ <div className="flex bg-slate-100 rounded-full p-1 mb-6">
+ <button
+ type="button"
+ onClick={() => setScreen('login')}
+ className={cn(
+ 'flex-1 py-2 text-sm font-medium rounded-full transition-colors',
+ isLoginTab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+ )}
+ >
+ Log in
+ </button>
+ <button
+ type="button"
+ onClick={() => setScreen('register_details')}
+ className={cn(
+ 'flex-1 py-2 text-sm font-medium rounded-full transition-colors',
+ isSignupTab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+ )}
+ >
+ Sign up
+ </button>
+ </div>
+
+ {/* Back link for sub-screens */}
+ {screen !== 'login' && screen !== 'register_details' && (
  <button
  type="button"
  onClick={resetState}
- className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 mb-2"
+ className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 mb-3"
  >
- <ArrowLeft className="w-3 h-3" /> Back to login
+ <ArrowLeft className="w-3 h-3" /> Back
  </button>
  )}
- <CardTitle className="text-2xl text-slate-800 ">
+
+ {/* Header */}
+ <div className="mb-6">
+ <h2 className="text-2xl font-bold text-slate-900">
  {screen === 'login'
  ? 'Welcome back'
  : screen === 'register_details'
@@ -211,10 +277,10 @@ export function LoginPage() {
  : screen === 'forgot_phone'
  ? 'Forgot password'
  : 'Reset password'}
- </CardTitle>
- <CardDescription>
+ </h2>
+ <p className="text-sm text-slate-500 mt-1">
  {screen === 'login'
- ? 'Sign in with your mobile number to continue ordering.'
+ ? 'Log in with your 10-digit mobile number.'
  : screen === 'register_details'
  ? 'Enter your details — we\u2019ll send an OTP to verify your mobile.'
  : screen === 'register_otp'
@@ -222,16 +288,18 @@ export function LoginPage() {
  : screen === 'forgot_phone'
  ? 'Enter your registered mobile number — we\u2019ll send an OTP.'
  : `Enter the OTP sent to ${phone}${demoOtp ? ` (demo: ${demoOtp})` : ''} + your new password.`}
- </CardDescription>
- </CardHeader>
+ </p>
+ </div>
 
- <CardContent className="space-y-4">
- {screen === 'login' ? (
- // ============ LOGIN (works for both customer + admin) ============
- <form onSubmit={handleLogin} className="space-y-3">
+ {/* ============ LOGIN (works for both customer + admin) ============ */}
+ {screen === 'login' && (
+ <form onSubmit={handleLogin} className="space-y-4">
  <div className="space-y-1.5">
- <Label htmlFor="phone">Mobile number</Label>
+ <Label htmlFor="phone">Phone number</Label>
+ <div className="relative">
+ <Smartphone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
  <PhoneInput id="phone" required value={phone} onChange={setPhone} />
+ </div>
  </div>
  <div className="space-y-1.5">
  <div className="flex items-center justify-between">
@@ -251,34 +319,30 @@ export function LoginPage() {
  </button>
  </div>
  </div>
- <Button type="submit" disabled={loading} className="w-full bg-orange-500 hover:bg-orange-600">
- {loading ? 'Signing in…' : 'Sign in'}
+ <Button type="submit" disabled={loading} className="w-full bg-orange-500 hover:bg-orange-600 h-10">
+ {loading ? 'Logging in…' : 'Log in'}
  </Button>
- <p className="text-center text-sm text-slate-600 ">
- Don&apos;t have an account?{' '}
- <button type="button" onClick={() => setScreen('register_details')} className="font-medium text-orange-600 hover:underline">
- Sign up
- </button>
- </p>
 
  {/* Demo credentials — both admin + customer use the same form */}
- <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+ <div className="mt-2 pt-4 border-t border-slate-100 space-y-2">
  <p className="text-xs font-medium text-slate-500 text-center">Demo credentials</p>
  <div className="grid grid-cols-1 gap-1.5 text-xs">
  <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded">
- <span className="text-slate-600 ">Admin</span>
- <code className="font-mono text-slate-700 ">{ADMIN_PHONE} / {ADMIN_PASSWORD}</code>
+ <span className="text-slate-600">Admin</span>
+ <code className="font-mono text-slate-700">{ADMIN_PHONE} / {ADMIN_PASSWORD}</code>
  </div>
  <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded">
- <span className="text-slate-600 ">Customer</span>
- <code className="font-mono text-slate-700 ">{DEMO_CUSTOMER_PHONE} / {DEMO_CUSTOMER_PASSWORD}</code>
+ <span className="text-slate-600">Customer</span>
+ <code className="font-mono text-slate-700">{DEMO_CUSTOMER_PHONE} / {DEMO_CUSTOMER_PASSWORD}</code>
  </div>
  </div>
  </div>
  </form>
- ) : screen === 'register_details' ? (
- // ============ REGISTER STEP 1: details ============
- <form onSubmit={sendRegisterOtp} className="space-y-3">
+ )}
+
+ {/* ============ REGISTER STEP 1: details ============ */}
+ {screen === 'register_details' && (
+ <form onSubmit={sendRegisterOtp} className="space-y-4">
  <div className="space-y-1.5">
  <Label htmlFor="fullName">Full name</Label>
  <div className="relative">
@@ -310,7 +374,7 @@ export function LoginPage() {
  <div className="space-y-1.5">
  <Label htmlFor="reg-dob">Date of birth <span className="text-slate-400 text-xs">(optional)</span></Label>
  <Input
- id="reg-dob" type="date" className="pl-3"
+ id="reg-dob" type="date"
  value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)}
  max={new Date().toISOString().slice(0, 10)}
  />
@@ -319,24 +383,20 @@ export function LoginPage() {
  <div className="space-y-1.5">
  <Label htmlFor="reg-anniv">Anniversary date <span className="text-slate-400 text-xs">(optional)</span></Label>
  <Input
- id="reg-anniv" type="date" className="pl-3"
+ id="reg-anniv" type="date"
  value={anniversaryDate} onChange={(e) => setAnniversaryDate(e.target.value)}
  max={new Date().toISOString().slice(0, 10)}
  />
  </div>
- <Button type="submit" disabled={loading} className="w-full bg-orange-500 hover:bg-orange-600">
+ <Button type="submit" disabled={loading} className="w-full bg-orange-500 hover:bg-orange-600 h-10">
  {loading ? 'Verifying phone…' : 'Verify phone & Sign up'}
  </Button>
- <p className="text-center text-sm text-slate-600 ">
- Already have an account?{' '}
- <button type="button" onClick={() => setScreen('login')} className="font-medium text-orange-600 hover:underline">
- Sign in
- </button>
- </p>
  </form>
- ) : screen === 'register_otp' ? (
- // ============ REGISTER STEP 2: OTP ============
- <form onSubmit={handleRegister} className="space-y-3">
+ )}
+
+ {/* ============ REGISTER STEP 2: OTP ============ */}
+ {screen === 'register_otp' && (
+ <form onSubmit={handleRegister} className="space-y-4">
  {demoOtp && (
  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 text-center">
  <strong>Demo OTP:</strong> <code className="font-mono text-lg tracking-wider">{demoOtp}</code>
@@ -353,7 +413,7 @@ export function LoginPage() {
  />
  </div>
  </div>
- <Button type="submit" disabled={loading || otp.length !== 6} className="w-full bg-orange-500 hover:bg-orange-600">
+ <Button type="submit" disabled={loading || otp.length !== 6} className="w-full bg-orange-500 hover:bg-orange-600 h-10">
  {loading ? 'Verifying…' : 'Verify & create account'}
  </Button>
  <div className="flex items-center justify-between text-xs">
@@ -380,20 +440,24 @@ export function LoginPage() {
  </button>
  </div>
  </form>
- ) : screen === 'forgot_phone' ? (
- // ============ FORGOT PASSWORD STEP 1: phone ============
- <form onSubmit={sendForgotOtp} className="space-y-3">
+ )}
+
+ {/* ============ FORGOT PASSWORD STEP 1: phone ============ */}
+ {screen === 'forgot_phone' && (
+ <form onSubmit={sendForgotOtp} className="space-y-4">
  <div className="space-y-1.5">
  <Label htmlFor="forgot-phone">Registered mobile number</Label>
  <PhoneInput id="forgot-phone" required value={phone} onChange={setPhone} />
  </div>
- <Button type="submit" disabled={loading} className="w-full bg-orange-500 hover:bg-orange-600">
+ <Button type="submit" disabled={loading} className="w-full bg-orange-500 hover:bg-orange-600 h-10">
  {loading ? 'Verifying phone…' : 'Verify phone'}
  </Button>
  </form>
- ) : screen === 'forgot_reset' ? (
- // ============ FORGOT PASSWORD STEP 2: OTP + new password (demo) OR set new password (widget) ============
- <form onSubmit={handleResetPassword} className="space-y-3">
+ )}
+
+ {/* ============ FORGOT PASSWORD STEP 2: OTP + new password ============ */}
+ {screen === 'forgot_reset' && (
+ <form onSubmit={handleResetPassword} className="space-y-4">
  {demoOtp && (
  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 text-center">
  <strong>Demo OTP:</strong> <code className="font-mono text-lg tracking-wider">{demoOtp}</code>
@@ -430,7 +494,7 @@ export function LoginPage() {
  </button>
  </div>
  </div>
- <Button type="submit" disabled={loading || password.length < 8 || (demoOtp ? otp.length !== 6 : false)} className="w-full bg-orange-500 hover:bg-orange-600">
+ <Button type="submit" disabled={loading || password.length < 8 || (demoOtp ? otp.length !== 6 : false)} className="w-full bg-orange-500 hover:bg-orange-600 h-10">
  {loading ? 'Resetting…' : 'Reset password'}
  </Button>
  {demoOtp && (
@@ -454,11 +518,9 @@ export function LoginPage() {
  </button>
  )}
  </form>
- ) : null}
- </CardContent>
- </Card>
+ )}
 
- <p className="mt-6 text-center text-xs text-slate-500 ">
+ <p className="mt-6 text-center text-xs text-slate-500">
  By continuing, you agree to FoodMitra&apos;s Terms of Service and Privacy Policy.
  </p>
  </div>
