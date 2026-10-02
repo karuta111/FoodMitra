@@ -12,15 +12,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, ApiError } from '../api/client';
 import { colors, radius, shadow } from '../theme/colors';
-import type { Address } from '../types';
+import { useCartStore } from '../store/cart';
+import type { Address, Cart } from '../types';
 
 export default function CheckoutScreen({ navigation }: any) {
-  const [addrs, setAddrs] = useState<Address[]>([]);
-  const [sel, setSel] = useState<string | null>(null);
-  const [placing, setPlacing] = useState(false);
+  const [addrs, setAddrs]           = useState<Address[]>([]);
+  const [sel, setSel]               = useState<string | null>(null);
+  const [syncing, setSyncing]       = useState(false);   // syncing cart to DB
+  const [syncedCart, setSyncedCart] = useState<Cart | null>(null); // server pricing
+  const [placing, setPlacing]       = useState(false);
   const [loadingAddrs, setLoadingAddrs] = useState(true);
   const insets = useSafeAreaInsets();
 
+  const cartItems      = useCartStore((s) => s.items);
+  const cartRestaurant = useCartStore((s) => s.restaurant);
+  const clearCart      = useCartStore((s) => s.clearCart);
+
+  // ── Load addresses ──────────────────────────────────────────────────────────
   useEffect(() => {
     api.get<Address[]>('/customers/addresses')
       .then((r) => { setAddrs(r); if (r.length > 0) setSel(r[0].id); })
@@ -28,24 +36,39 @@ export default function CheckoutScreen({ navigation }: any) {
       .finally(() => setLoadingAddrs(false));
   }, []);
 
+  // ── Sync in-memory cart → DB whenever the address selection changes ─────────
+  // This gives us the real delivery fee scoped to that address.
+  useEffect(() => {
+    if (!cartRestaurant || cartItems.length === 0) return;
+
+    setSyncing(true);
+    api.post<Cart>('/cart/sync', {
+      restaurantId: cartRestaurant.id,
+      items: cartItems.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity })),
+    })
+      .then((cart) => setSyncedCart(cart))
+      .catch(() => {/* keep showing last known totals */})
+      .finally(() => setSyncing(false));
+  }, [sel, cartRestaurant, cartItems]);
+
+  // ── Place order ─────────────────────────────────────────────────────────────
   const place = async () => {
-    if (!sel) return;
+    if (!sel || !syncedCart) return;
     setPlacing(true);
     try {
-      const r = await api.post<{ order: { id: string }; payment: { razorpayOrderId: string } }>(
-        '/orders', { deliveryAddressId: sel, paymentMethod: 'RAZORPAY' }
-      );
-      try {
-        await api.post('/payments/verify', {
-          razorpayOrderId: r.payment.razorpayOrderId,
-          razorpayPaymentId: `pay_mock_${Date.now()}`,
-          razorpaySignature: 'mock',
-        });
-      } catch {}
+      // Cart is already synced to DB — just place the order
+      const r = await api.post<{ order: { id: string } }>('/orders', {
+        deliveryAddressId: sel,
+      });
+
+      // Order placed — wipe the in-memory cart
+      clearCart();
       navigation.replace('OrderTracking', { orderId: r.order.id });
     } catch (e) {
       alert(e instanceof ApiError ? e.message : 'Failed to place order');
-    } finally { setPlacing(false); }
+    } finally {
+      setPlacing(false);
+    }
   };
 
   const labelIcon = (label: string) => {
@@ -152,14 +175,53 @@ export default function CheckoutScreen({ navigation }: any) {
             <Ionicons name="checkmark-circle" size={18} color={colors.success} />
           </View>
         </View>
+
+        {/* Order summary — shows real server-computed pricing */}
+        <Text style={[s.sectionLabel, { marginTop: 24 }]}>ORDER SUMMARY</Text>
+        <View style={s.summaryCard}>
+          {syncing ? (
+            <View style={s.summaryLoading}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={s.summaryLoadingText}>Calculating totals…</Text>
+            </View>
+          ) : syncedCart ? (
+            <>
+              <View style={s.summaryRow}>
+                <Text style={s.summaryLabel}>Subtotal</Text>
+                <Text style={s.summaryValue}>₹{syncedCart.subtotal}</Text>
+              </View>
+              <View style={s.summaryRow}>
+                <Text style={s.summaryLabel}>Delivery fee</Text>
+                <Text style={s.summaryValue}>₹{syncedCart.estimatedDeliveryFee}</Text>
+              </View>
+              <View style={s.summaryDivider} />
+              <View style={s.summaryRow}>
+                <Text style={s.summaryTotal}>Total</Text>
+                <Text style={[s.summaryTotal, { color: colors.primary }]}>
+                  ₹{syncedCart.estimatedTotal}
+                </Text>
+              </View>
+              {!syncedCart.meetsMinimum && (
+                <Text style={s.minWarn}>
+                  Minimum order is ₹{syncedCart.minOrderAmount}
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={s.summaryLoadingText}>Add an address to see delivery fee</Text>
+          )}
+        </View>
       </ScrollView>
 
       {/* Bottom place order button */}
       <View style={[s.footer, { paddingBottom: Math.max(insets.bottom + 8, 16) }]}>
         <TouchableOpacity
-          style={[s.placeBtn, (!sel || placing) && s.placeBtnDisabled]}
+          style={[
+            s.placeBtn,
+            (!sel || placing || syncing || !syncedCart || !syncedCart.meetsMinimum) && s.placeBtnDisabled,
+          ]}
           onPress={place}
-          disabled={!sel || placing}
+          disabled={!sel || placing || syncing || !syncedCart || !syncedCart.meetsMinimum}
           activeOpacity={0.88}
         >
           {placing ? (
@@ -167,7 +229,9 @@ export default function CheckoutScreen({ navigation }: any) {
           ) : (
             <>
               <Ionicons name="bag-check-outline" size={20} color="#fff" />
-              <Text style={s.placeBtnText}>Place Order</Text>
+              <Text style={s.placeBtnText}>
+                Place Order{syncedCart ? `  •  ₹${syncedCart.estimatedTotal}` : ''}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -364,6 +428,55 @@ const s = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.text,
+  },
+  // Order summary
+  summaryCard: {
+    backgroundColor: '#fff',
+    borderRadius: radius.md,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.sm,
+  },
+  summaryLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  summaryLoadingText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: 6,
+  },
+  summaryTotal: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  minWarn: {
+    marginTop: 8,
+    fontSize: 12,
+    color: colors.warning,
+    textAlign: 'center',
   },
   footer: {
     paddingHorizontal: 16,

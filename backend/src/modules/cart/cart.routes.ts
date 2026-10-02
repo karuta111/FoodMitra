@@ -1,7 +1,7 @@
 // src/modules/cart/cart.routes.ts
 import { Router } from 'express';
 import { CartService } from '@/lib/services/cart.service';
-import { addCartItemSchema, updateCartItemSchema } from '@/lib/validators';
+import { addCartItemSchema, updateCartItemSchema, syncCartSchema } from '@/lib/validators';
 import { asyncHandler, ok, noContent } from '@/lib/api-response';
 import { requireRoles } from '@/middleware/auth';
 
@@ -60,6 +60,25 @@ router.delete(
   asyncHandler(async (req, res) => {
     await CartService.removeItem(req.auth!.userId, req.params.id as string);
     return noContent(res);
+  }),
+);
+
+// POST /api/v1/cart/sync
+// Called by the mobile client right before checkout. Atomically replaces the
+// DB cart with whatever items the user built up in memory on the device.
+// Returns the Cart with server-computed pricing so the checkout screen can
+// show accurate totals.
+router.post(
+  '/sync',
+  requireRoles('CUSTOMER'),
+  asyncHandler(async (req, res) => {
+    const parsed = syncCartSchema.parse(req.body);
+    const cart = await CartService.syncCart(
+      req.auth!.userId,
+      parsed.restaurantId,
+      parsed.items,
+    );
+    return ok(res, cart);
   }),
 );
 

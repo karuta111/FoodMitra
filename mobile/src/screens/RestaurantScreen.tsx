@@ -2,32 +2,33 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   View,
   Text,
-  FlatList,
   SectionList,
   TouchableOpacity,
   StyleSheet,
   TextInput,
-  Image,
   Animated,
   ActivityIndicator,
-  StatusBar,
-  ScrollView,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { api, ApiError } from '../api/client';
+import { api } from '../api/client';
 import { colors, radius, shadow } from '../theme/colors';
-import type { MenuCategory, MenuItem, Cart, Restaurant } from '../types';
+import { Screen } from '../components/ui';
+import { useCartStore } from '../store/cart';
+import type { MenuCategory, MenuItem, Restaurant } from '../types';
 
 // ─── Menu Item Card ──────────────────────────────────────────────────────────
 function MenuItemCard({
   item,
   cartQty,
   onAdd,
+  onDecrement,
 }: {
   item: MenuItem;
   cartQty: number;
   onAdd: () => void;
+  onDecrement: () => void;
 }) {
   const available = item.availability === 'AVAILABLE';
   const isVeg = item.isVeg;
@@ -36,11 +37,9 @@ function MenuItemCard({
     <View style={[mc.card, !available && { opacity: 0.5 }]}>
       {/* Left: text info */}
       <View style={mc.info}>
-        {/* Veg / Non-veg indicator */}
         <View style={[mc.vegDot, { borderColor: isVeg ? colors.veg : colors.nonVeg }]}>
           <View style={[mc.vegDotInner, { backgroundColor: isVeg ? colors.veg : colors.nonVeg }]} />
         </View>
-
         <Text style={mc.name} numberOfLines={2}>{item.name}</Text>
         <Text style={mc.price}>₹{item.price}</Text>
         {item.description ? (
@@ -48,27 +47,46 @@ function MenuItemCard({
         ) : null}
       </View>
 
-      {/* Right: image + ADD button */}
-      <View style={mc.imgWrap}>
-        {/* placeholder box — shown when no image */}
+      {/* Right column: image on top, ADD/stepper below */}
+      <View style={mc.rightCol}>
         <View style={mc.imgPlaceholder}>
           <Ionicons name="fast-food-outline" size={28} color="#D0D0D0" />
         </View>
 
-        {/* ADD / qty control */}
-        <TouchableOpacity
-          style={[mc.addBtn, !available && mc.addBtnDisabled]}
-          onPress={onAdd}
-          disabled={!available}
-          activeOpacity={0.8}
-        >
-          <Text style={mc.addText}>ADD</Text>
-          {cartQty > 0 && (
-            <View style={mc.qtyBubble}>
-              <Text style={mc.qtyBubbleText}>{cartQty}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        {cartQty > 0 ? (
+          <View style={mc.stepper}>
+            <TouchableOpacity
+              style={mc.stepBtn}
+              onPress={onDecrement}
+              activeOpacity={0.7}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              {cartQty === 1
+                ? <Ionicons name="trash-outline" size={15} color={colors.primary} />
+                : <Text style={mc.stepMinus}>−</Text>
+              }
+            </TouchableOpacity>
+            <Text style={mc.stepQty}>{cartQty}</Text>
+            <TouchableOpacity
+              style={mc.stepBtn}
+              onPress={onAdd}
+              activeOpacity={0.7}
+              disabled={!available}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="add" size={15} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[mc.addBtn, !available && mc.addBtnDisabled]}
+            onPress={onAdd}
+            disabled={!available}
+            activeOpacity={0.8}
+          >
+            <Text style={mc.addText}>ADD</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -91,12 +109,20 @@ export default function RestaurantScreen({ route, navigation }: any) {
 
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
-  const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<TextInput>(null);
   const searchAnim = useRef(new Animated.Value(0)).current;
+
+  // ── Cart store (in-memory, no DB calls here) ───────────────────────────────
+  const cartItems      = useCartStore((s) => s.items);
+  const cartRestaurant = useCartStore((s) => s.restaurant);
+  const addItem        = useCartStore((s) => s.addItem);
+  const replaceAndAdd  = useCartStore((s) => s.replaceAndAdd);
+  const setQty         = useCartStore((s) => s.setQty);
+  const totalItems     = useCartStore((s) => s.totalItems);
+  const subtotal       = useCartStore((s) => s.subtotal);
 
   // ── Load data ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -109,7 +135,7 @@ export default function RestaurantScreen({ route, navigation }: any) {
     }).catch(() => {}).finally(() => setLoading(false));
   }, [restaurantId]);
 
-  // ── Toggle search bar ──────────────────────────────────────────────────────
+  // ── Toggle search ──────────────────────────────────────────────────────────
   const openSearch = useCallback(() => {
     setSearchVisible(true);
     Animated.timing(searchAnim, { toValue: 1, duration: 220, useNativeDriver: false }).start(() => {
@@ -124,6 +150,11 @@ export default function RestaurantScreen({ route, navigation }: any) {
     });
   }, []);
 
+  const displayName = restaurant?.name ?? restaurantName;
+  const cuisine     = restaurant?.cuisine ?? '';
+  const rating      = restaurant?.avgRating ?? 0;
+  const ratingCount = restaurant?.ratingCount ?? 0;
+
   // ── Filtered sections ──────────────────────────────────────────────────────
   const sections = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -132,60 +163,64 @@ export default function RestaurantScreen({ route, navigation }: any) {
         ...cat,
         data: q
           ? cat.items.filter(
-              (item) =>
-                item.name.toLowerCase().includes(q) ||
-                (item.description ?? '').toLowerCase().includes(q),
+              (it) =>
+                it.name.toLowerCase().includes(q) ||
+                (it.description ?? '').toLowerCase().includes(q),
             )
           : cat.items,
       }))
       .filter((cat) => cat.data.length > 0);
   }, [categories, searchQuery]);
 
-  // ── Cart helpers ───────────────────────────────────────────────────────────
+  // ── Per-item quantity map from the store ────────────────────────────────────
   const cartQtyMap = useMemo(() => {
+    // Only show quantities for items from THIS restaurant
+    if (cartRestaurant?.id !== restaurantId) return {} as Record<string, number>;
     const map: Record<string, number> = {};
-    (cart?.items ?? []).forEach((i) => {
-      map[i.menuItemId] = (map[i.menuItemId] || 0) + i.quantity;
-    });
+    cartItems.forEach((i) => { map[i.menuItemId] = i.quantity; });
     return map;
-  }, [cart]);
+  }, [cartItems, cartRestaurant, restaurantId]);
 
-  const addItem = async (menuItemId: string) => {
-    try {
-      const c = await api.post<Cart>('/cart/items', { menuItemId, quantity: 1, replaceRestaurant: false });
-      setCart(c);
-    } catch (e) {
-      if (e instanceof ApiError && e.code === 'CART_RESTAURANT_MISMATCH') {
-        const c = await api.post<Cart>('/cart/items', { menuItemId, quantity: 1, replaceRestaurant: true });
-        setCart(c);
-      }
+  // ── Add item — instant, no network call ────────────────────────────────────
+  const handleAddItem = useCallback((item: MenuItem) => {
+    const result = addItem(
+      { id: restaurantId, name: displayName },
+      { menuItemId: item.id, name: item.name, unitPrice: item.price, isVeg: item.isVeg },
+    );
+
+    if (result === 'mismatch') {
+      Alert.alert(
+        'Start new cart?',
+        `Your cart has items from "${cartRestaurant?.name}". Starting a new cart will remove those items.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Start new cart',
+            style: 'destructive',
+            onPress: () =>
+              replaceAndAdd(
+                { id: restaurantId, name: displayName },
+                { menuItemId: item.id, name: item.name, unitPrice: item.price, isVeg: item.isVeg },
+              ),
+          },
+        ],
+      );
     }
-  };
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  const displayName = restaurant?.name ?? restaurantName;
-  const cuisine = restaurant?.cuisine ?? '';
-  const rating = restaurant?.avgRating ?? 0;
-  const ratingCount = restaurant?.ratingCount ?? 0;
+  }, [addItem, replaceAndAdd, restaurantId, displayName, cartRestaurant]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <View style={[s.root, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-
+    <Screen>
       {/* ── Top header ── */}
-      <View style={s.header}>
-        {/* Back */}
+      <View style={[s.header, { paddingTop: insets.top }]}>
         <TouchableOpacity style={s.iconBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
 
-        {/* Title (hidden when search open) */}
         {!searchVisible && (
           <Text style={s.headerTitle} numberOfLines={1}>{displayName}</Text>
         )}
 
-        {/* Animated search bar */}
         {searchVisible && (
           <Animated.View style={[s.searchBar, { opacity: searchAnim, flex: 1 }]}>
             <Ionicons name="search" size={16} color={colors.textMuted} style={{ marginRight: 6 }} />
@@ -206,7 +241,6 @@ export default function RestaurantScreen({ route, navigation }: any) {
           </Animated.View>
         )}
 
-        {/* Right buttons */}
         <View style={s.headerRight}>
           {!searchVisible ? (
             <TouchableOpacity style={s.iconBtn} onPress={openSearch} activeOpacity={0.7}>
@@ -239,14 +273,16 @@ export default function RestaurantScreen({ route, navigation }: any) {
               <Ionicons name="star" size={12} color="#fff" />
               <Text style={s.ratingText}>{rating.toFixed(1)}</Text>
               {ratingCount > 0 && (
-                <Text style={s.ratingCount}>  {ratingCount > 1000 ? `${(ratingCount / 1000).toFixed(1)}k` : ratingCount}+</Text>
+                <Text style={s.ratingCount}>
+                  {'  '}{ratingCount > 1000 ? `${(ratingCount / 1000).toFixed(1)}k` : ratingCount}+
+                </Text>
               )}
             </View>
           )}
         </View>
       )}
 
-      {/* ── Divider ── */}
+      {/* ── Section divider ── */}
       <View style={s.stripDivider} />
 
       {/* ── Menu list ── */}
@@ -259,13 +295,15 @@ export default function RestaurantScreen({ route, navigation }: any) {
         <View style={s.emptyWrap}>
           <Ionicons name="search-outline" size={44} color={colors.textLight} />
           <Text style={s.emptyTitle}>{searchQuery ? 'No items found' : 'No menu available'}</Text>
-          <Text style={s.emptySubtitle}>{searchQuery ? `No results for "${searchQuery}"` : 'This restaurant has no menu yet'}</Text>
+          <Text style={s.emptySubtitle}>
+            {searchQuery ? `No results for "${searchQuery}"` : 'This restaurant has no menu yet'}
+          </Text>
         </View>
       ) : (
         <SectionList
           sections={sections}
           keyExtractor={(item) => item.id}
-          stickySectionHeadersEnabled={true}
+          stickySectionHeadersEnabled
           renderSectionHeader={({ section }) => (
             <CategoryHeader title={section.name} count={section.data.length} />
           )}
@@ -273,12 +311,13 @@ export default function RestaurantScreen({ route, navigation }: any) {
             <MenuItemCard
               item={item}
               cartQty={cartQtyMap[item.id] ?? 0}
-              onAdd={() => addItem(item.id)}
+              onAdd={() => handleAddItem(item)}
+              onDecrement={() => setQty(item.id, (cartQtyMap[item.id] ?? 1) - 1)}
             />
           )}
           contentContainerStyle={[
             s.listContent,
-            { paddingBottom: cart && cart.items.length > 0 ? 100 : 24 },
+            { paddingBottom: totalItems() > 0 ? 100 : 24 },
           ]}
           ItemSeparatorComponent={() => <View style={s.itemSep} />}
           SectionSeparatorComponent={() => <View style={s.sectionSep} />}
@@ -286,7 +325,7 @@ export default function RestaurantScreen({ route, navigation }: any) {
       )}
 
       {/* ── Floating cart bar ── */}
-      {cart && cart.items.length > 0 && (
+      {totalItems() > 0 && cartRestaurant?.id === restaurantId && (
         <TouchableOpacity
           style={[s.cartBar, { bottom: insets.bottom + 12 }]}
           onPress={() => navigation.navigate('CartTab')}
@@ -294,20 +333,20 @@ export default function RestaurantScreen({ route, navigation }: any) {
         >
           <View style={s.cartLeft}>
             <View style={s.cartBadge}>
-              <Text style={s.cartBadgeText}>{cart.items.reduce((a, i) => a + i.quantity, 0)}</Text>
+              <Text style={s.cartBadgeText}>{totalItems()}</Text>
             </View>
             <Text style={s.cartItemsText}>
-              {cart.items.reduce((a, i) => a + i.quantity, 0)} item{cart.items.reduce((a, i) => a + i.quantity, 0) !== 1 ? 's' : ''}
+              {totalItems()} item{totalItems() !== 1 ? 's' : ''}
             </Text>
           </View>
-          <Text style={s.cartTotal}>₹{cart.estimatedTotal}</Text>
+          <Text style={s.cartTotal}>₹{subtotal()}</Text>
           <View style={s.cartRight}>
             <Text style={s.cartAction}>View Cart</Text>
             <Ionicons name="arrow-forward" size={14} color="#fff" />
           </View>
         </TouchableOpacity>
       )}
-    </View>
+    </Screen>
   );
 }
 
@@ -315,10 +354,10 @@ export default function RestaurantScreen({ route, navigation }: any) {
 const mc = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
+    paddingVertical: 14,
+    backgroundColor: colors.white,
   },
   info: {
     flex: 1,
@@ -356,22 +395,21 @@ const mc = StyleSheet.create({
     marginTop: 4,
     lineHeight: 17,
   },
-  imgWrap: {
+  rightCol: {
     width: 100,
     alignItems: 'center',
+    gap: 8,                        // space between image and ADD/stepper
   },
   imgPlaceholder: {
     width: 96,
     height: 88,
     borderRadius: radius.md,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: 'rgba(245,245,245,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
   },
   addBtn: {
-    position: 'absolute',
-    bottom: -10,
     backgroundColor: '#fff',
     borderWidth: 1.5,
     borderColor: colors.primary,
@@ -389,34 +427,46 @@ const mc = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
-  qtyBubble: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.primary,
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    ...shadow.sm,
+  },
+  stepBtn: {
+    width: 30,
+    height: 30,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  qtyBubbleText: {
-    fontSize: 10,
-    color: '#fff',
-    fontWeight: '700',
+  stepMinus: {
+    fontSize: 20,
+    fontWeight: '300',
+    color: colors.primary,
+    lineHeight: 22,
+  },
+  stepQty: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.primary,
+    minWidth: 22,
+    textAlign: 'center',
   },
 });
 
 // ─── Category header styles ───────────────────────────────────────────────────
 const ch = StyleSheet.create({
   wrap: {
-    backgroundColor: '#F8F8F8',
+    backgroundColor: 'rgba(248,248,248,0.88)',  // semi-transparent so bg shows through
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#EFEFEF',
+    borderTopColor: colors.borderLight,
     borderBottomWidth: 1,
-    borderBottomColor: '#EFEFEF',
+    borderBottomColor: colors.borderLight,
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
@@ -436,30 +486,25 @@ const ch = StyleSheet.create({
 
 // ─── Screen styles ────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-
-  // Header
+  // Header — transparent so bg pattern shows through
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    height: 54,
-    backgroundColor: '#fff',
+    paddingBottom: 10,
+    backgroundColor: 'transparent',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.borderLight,
   },
   iconBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     ...shadow.sm,
   },
   headerTitle: {
@@ -478,7 +523,7 @@ const s = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F4F4F4',
+    backgroundColor: colors.surfaceGrey,
     borderRadius: radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -498,7 +543,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 6,
   },
 
-  // Info strip
+  // Info strip — white card
   infoStrip: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -506,7 +551,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 14,
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
   },
   infoLeft: {
     flex: 1,
@@ -559,9 +604,11 @@ const s = StyleSheet.create({
     fontSize: 10,
     fontWeight: '500',
   },
+
+  // Thin section divider — slightly transparent
   stripDivider: {
     height: 6,
-    backgroundColor: '#F4F4F4',
+    backgroundColor: 'rgba(244,244,244,0.7)',
   },
 
   // List
@@ -570,7 +617,7 @@ const s = StyleSheet.create({
   },
   itemSep: {
     height: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.borderLight,
     marginHorizontal: 16,
   },
   sectionSep: {

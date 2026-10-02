@@ -126,30 +126,19 @@ function BannerCarousel() {
   );
 }
 
-// ─── Open / Closed badge ──────────────────────────────────────────────────────
-function StatusBadge({ isOpen }: { isOpen: boolean }) {
-  return (
-    <View style={[badge.pill, isOpen ? badge.openPill : badge.closedPill]}>
-      <View style={[badge.dot, isOpen ? badge.openDot : badge.closedDot]} />
-      <Text style={[badge.label, isOpen ? badge.openLabel : badge.closedLabel]}>
-        {isOpen ? 'Open' : 'Closed'}
-      </Text>
-    </View>
-  );
-}
-
-// ─── Restaurant card ──────────────────────────────────────────────────────────
+// ─── Restaurant card (Zomato-style vertical) ─────────────────────────────────
 function RestaurantCard({ item, onPress }: { item: Restaurant; onPress: () => void }) {
   const isOpen = item.availability === 'OPEN';
   const firstLetter = item.name.charAt(0).toUpperCase();
+  const hasRating = item.avgRating > 0;
 
   return (
     <TouchableOpacity
       style={[cs.card, !isOpen && cs.cardClosed]}
-      activeOpacity={0.82}
+      activeOpacity={0.88}
       onPress={onPress}
     >
-      {/* Thumbnail */}
+      {/* ── Cover image ── */}
       <View style={cs.imgWrap}>
         {item.logoUrl ? (
           <Image source={{ uri: item.logoUrl }} style={cs.img} resizeMode="cover" />
@@ -158,31 +147,37 @@ function RestaurantCard({ item, onPress }: { item: Restaurant; onPress: () => vo
             <Text style={cs.imgLetter}>{firstLetter}</Text>
           </View>
         )}
-        {!isOpen && <View style={cs.closedOverlay} />}
+
+        {/* Closed overlay */}
+        {!isOpen && (
+          <View style={cs.closedOverlay}>
+            <View style={cs.closedBadge}>
+              <Text style={cs.closedBadgeText}>Closed</Text>
+            </View>
+          </View>
+        )}
       </View>
 
-      {/* Details */}
+      {/* ── Details ── */}
       <View style={cs.info}>
-        {/* Name + badge row */}
+        {/* Name + Rating */}
         <View style={cs.nameRow}>
           <Text style={cs.name} numberOfLines={1}>{item.name}</Text>
-          <StatusBadge isOpen={isOpen} />
+          {/* {hasRating && (
+            <View style={cs.ratingPill}>
+              <Ionicons name="star" size={10} color="#fff" />
+              <Text style={cs.ratingText}>{item.avgRating.toFixed(1)}</Text>
+            </View>
+          )} */}
         </View>
 
         {/* Cuisine */}
         <Text style={cs.cuisine} numberOfLines={1}>{item.cuisine}</Text>
 
         {/* Divider */}
-        <View style={cs.divider} />
+        {/* <View style={cs.divider} /> */}
 
-        {/* Bottom meta row */}
-        <View style={cs.bottomRow}>
-          <Ionicons name="time-outline" size={12} color={colors.textMuted} />
-          <Text style={cs.metaText}>20–35 min</Text>
-          <View style={cs.metaDot} />
-          <Ionicons name="bicycle-outline" size={13} color={colors.textMuted} />
-          <Text style={cs.metaText}>Free delivery</Text>
-        </View>
+        
       </View>
     </TouchableOpacity>
   );
@@ -370,54 +365,27 @@ const bs = StyleSheet.create({
   // active dot styles are handled via AnimatedDot inline styles
 });
 
-// ─── Badge styles ─────────────────────────────────────────────────────────────
-const badge = StyleSheet.create({
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.full,
-    gap: 4,
-  },
-  openPill: {
-    backgroundColor: '#E8F5F0',
-    borderWidth: 1,
-    borderColor: '#B2DFDB',
-  },
-  closedPill: {
-    backgroundColor: '#F5F5F5',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  openDot: { backgroundColor: '#00897B' },
-  closedDot: { backgroundColor: '#9E9E9E' },
-  label: { fontSize: 11, fontWeight: '600', letterSpacing: 0.2 },
-  openLabel: { color: '#00695C' },
-  closedLabel: { color: '#757575' },
-});
+// ─── Card styles (Zomato vertical) ───────────────────────────────────────────
+const CARD_IMG_H = Math.round((SCREEN_W - 32) * 0.52); // ~52% aspect ratio
 
-// ─── Card styles ──────────────────────────────────────────────────────────────
 const cs = StyleSheet.create({
   card: {
-    flexDirection: 'row',
     backgroundColor: colors.white,
-    borderRadius: radius.md,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radius.lg,
+    marginBottom: 20,
     overflow: 'hidden',
-    ...shadow.sm,
+    ...shadow.md,
   },
   cardClosed: {
-    opacity: 0.72,
+    opacity: 0.7,
   },
-  imgWrap: { width: 110, height: 110, position: 'relative' },
+
+  // ── Cover image ──
+  imgWrap: {
+    width: '100%',
+    height: CARD_IMG_H,
+    position: 'relative',
+  },
   img: { width: '100%', height: '100%' },
   imgFallback: {
     width: '100%',
@@ -426,35 +394,111 @@ const cs = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imgLetter: { fontSize: 38, fontWeight: '800', color: colors.primary },
+  imgLetter: { fontSize: 52, fontWeight: '800', color: colors.primary },
+
+  // closed state
   closedOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.40)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  info: { flex: 1, paddingHorizontal: 12, paddingVertical: 10, justifyContent: 'space-between' },
+  closedBadge: {
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  closedBadgeText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // offer badge at the bottom-left of the image
+  offerBadge: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.58)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+  },
+  offerText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // ── Details ──
+  info: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
+  },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
   },
-  name: { fontSize: 15, fontWeight: '700', color: colors.text, flex: 1 },
-  cuisine: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  name: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    flex: 1,
+  },
+
+  // Zomato green rating pill
+  ratingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#1BA672',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+  },
+  ratingText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  cuisine: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 3,
+  },
+
   divider: {
     height: 1,
     backgroundColor: colors.borderLight,
-    marginVertical: 6,
+    marginVertical: 10,
   },
-  bottomRow: {
+
+  // bottom meta row  (time · distance · price)
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  metaText: { fontSize: 11, color: colors.textMuted },
+  metaText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '500',
+  },
   metaDot: {
     width: 3,
     height: 3,
-    borderRadius: 1.5,
+    borderRadius: 2,
     backgroundColor: colors.textLight,
     marginHorizontal: 2,
   },
@@ -534,8 +578,8 @@ const s = StyleSheet.create({
     paddingBottom: 100,
   },
   sectionHeader: {
-    marginTop: 20,
-    marginBottom: 12,
+    marginTop: 16,
+    marginBottom: 4,
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',

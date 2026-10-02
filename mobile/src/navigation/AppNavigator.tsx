@@ -60,13 +60,10 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             activeOpacity={0.7}
             onPress={onPress}
           >
-            {isFocused ? (
-              <View style={tabStyles.activeIconWrap}>
-                <Feather name={tab.icon as any} size={20} color={colors.primary} />
-              </View>
-            ) : (
-              <Feather name={tab.icon as any} size={22} color={colors.textMuted} />
-            )}
+            {/* Background box always present — transparent when inactive so layout never shifts */}
+            <View style={[tabStyles.iconWrap, isFocused && tabStyles.iconWrapActive]}>
+              <Feather name={tab.icon as any} size={20} color={isFocused ? colors.primary : colors.textMuted} />
+            </View>
             <Text style={[tabStyles.label, isFocused && tabStyles.labelActive]}>
               {tab.label}
             </Text>
@@ -91,11 +88,16 @@ const tabStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
   },
-  activeIconWrap: {
-    backgroundColor: '#FDECEA',
+  iconWrap: {
+    width: 36,
+    height: 28,
     borderRadius: 8,
-    padding: 4,
-    marginBottom: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',   // invisible spacer when inactive
+  },
+  iconWrapActive: {
+    backgroundColor: '#FDECEA',       // red tint when active
   },
   label: {
     fontSize: 10,

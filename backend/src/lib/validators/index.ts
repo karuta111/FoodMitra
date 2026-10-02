@@ -51,6 +51,20 @@ export const updateCartItemSchema = z.object({
   quantity: z.coerce.number().int().min(1).max(50),
 });
 
+// Cart sync — sent from mobile right before checkout.
+// The backend atomically replaces the DB cart with this payload.
+export const syncCartSchema = z.object({
+  restaurantId: z.string().min(1),
+  items: z
+    .array(
+      z.object({
+        menuItemId: z.string().min(1),
+        quantity: z.number().int().min(1).max(50),
+      }),
+    )
+    .min(1),
+});
+
 // Orders
 export const createOrderSchema = z.object({
   deliveryAddressId: z.string().min(1),

@@ -1,52 +1,64 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { api } from '../api/client';
 import { colors, radius, shadow } from '../theme/colors';
 import { Screen, EmptyState, Btn } from '../components/ui';
-import type { Cart, CartItem } from '../types';
+import { useCartStore, CartLineItem } from '../store/cart';
+
+// Delivery fee is not known until the address is chosen at checkout.
+// Show a placeholder here; the real fee appears on the checkout screen
+// after the cart is synced to the server.
+const DELIVERY_FEE_PLACEHOLDER = 0;
 
 export default function CartScreen({ navigation }: any) {
-  const [cart, setCart] = useState<Cart | null>(null);
-  const [loading, setLoading] = useState(true);
-  const insets = useSafeAreaInsets();
+  const insets     = useSafeAreaInsets();
+  const items      = useCartStore((s) => s.items);
+  const restaurant = useCartStore((s) => s.restaurant);
+  const setQty     = useCartStore((s) => s.setQty);
+  const clearCart  = useCartStore((s) => s.clearCart);
+  const subtotal   = useCartStore((s) => s.subtotal);
+  const totalItems = useCartStore((s) => s.totalItems);
 
-  const load = useCallback(async () => {
-    try { setCart(await api.get<Cart | null>('/cart')); }
-    catch {}
-    finally { setLoading(false); }
-  }, []);
+  const total = subtotal() + DELIVERY_FEE_PLACEHOLDER;
+  const hasItems = items.length > 0;
 
-  useEffect(() => { load(); }, [load]);
-
-  const updateQty = async (id: string | null, qty: number) => {
-    if (!id) return;
-    try {
-      setCart(
-        qty <= 0
-          ? await api.delete<Cart | null>(`/cart/items/${id}`)
-          : await api.patch<Cart>(`/cart/items/${id}`, { quantity: qty })
-      );
-    } catch {}
-  };
-
-  const renderItem = ({ item }: { item: CartItem }) => (
+  const renderItem = ({ item }: { item: CartLineItem }) => (
     <View style={s.item}>
-      <View style={{ flex: 1 }}>
-        <Text style={s.itemName}>{item.name}</Text>
+      {/* Top row: veg dot + name + subtotal */}
+      <View style={s.itemTop}>
+        <View style={[s.vegDot, { borderColor: item.isVeg ? colors.veg : colors.nonVeg }]}>
+          <View style={[s.vegDotInner, { backgroundColor: item.isVeg ? colors.veg : colors.nonVeg }]} />
+        </View>
+        <Text style={s.itemName} numberOfLines={1}>{item.name}</Text>
+        <Text style={s.itemSubtotal}>₹{item.unitPrice * item.quantity}</Text>
+      </View>
+
+      {/* Bottom row: price × qty on left, stepper on right */}
+      <View style={s.itemBottom}>
         <Text style={s.itemPrice}>₹{item.unitPrice} × {item.quantity}</Text>
+
+        <View style={s.qtyRow}>
+          <TouchableOpacity
+            style={s.qtyBtn}
+            onPress={() => setQty(item.menuItemId, item.quantity - 1)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {item.quantity === 1
+              ? <Ionicons name="trash-outline" size={15} color={colors.primary} />
+              : <Text style={s.qtyMinus}>−</Text>
+            }
+          </TouchableOpacity>
+          <Text style={s.qtyText}>{item.quantity}</Text>
+          <TouchableOpacity
+            style={s.qtyBtn}
+            onPress={() => setQty(item.menuItemId, item.quantity + 1)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="add" size={15} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
-      <View style={s.qtyRow}>
-        <TouchableOpacity style={s.qtyBtn} onPress={() => updateQty(item.id, item.quantity - 1)}>
-          <Ionicons name="remove" size={14} color={colors.primary} />
-        </TouchableOpacity>
-        <Text style={s.qtyText}>{item.quantity}</Text>
-        <TouchableOpacity style={s.qtyBtn} onPress={() => updateQty(item.id, item.quantity + 1)}>
-          <Ionicons name="add" size={14} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
-      <Text style={s.subtotal}>₹{item.subtotal}</Text>
     </View>
   );
 
@@ -54,47 +66,52 @@ export default function CartScreen({ navigation }: any) {
     <Screen>
       {/* Header */}
       <View style={[s.header, { paddingTop: Math.max(insets.top + 10, 24) }]}>
-        <Text style={s.title}>Your Cart</Text>
-        {cart && cart.items.length > 0 && (
-          <Text style={s.subtitle}>From {cart.restaurant.name}</Text>
+        <View style={s.headerTop}>
+          <Text style={s.title}>Your Cart</Text>
+          {hasItems && (
+            <TouchableOpacity onPress={clearCart} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={s.clearText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {restaurant && (
+          <Text style={s.subtitle}>From {restaurant.name}</Text>
         )}
       </View>
 
-      {loading ? (
-        <Text style={s.load}>Loading...</Text>
-      ) : cart && cart.items.length > 0 ? (
+      {hasItems ? (
         <>
           <FlatList
-            data={cart.items}
-            keyExtractor={(i, idx) => i.id || idx.toString()}
+            data={items}
+            keyExtractor={(i) => i.menuItemId}
             renderItem={renderItem}
             contentContainerStyle={s.list}
           />
 
-          {/* Summary Card */}
+          {/* Summary card */}
           <View style={s.summaryCard}>
             <View style={s.summaryRow}>
               <Text style={s.summaryLabel}>Subtotal</Text>
-              <Text style={s.summaryValue}>₹{cart.subtotal}</Text>
+              <Text style={s.summaryValue}>₹{subtotal()}</Text>
             </View>
             <View style={s.summaryRow}>
               <Text style={s.summaryLabel}>Delivery fee</Text>
-              <Text style={s.summaryValue}>₹{cart.estimatedDeliveryFee}</Text>
+              <Text style={s.summaryValue}>Calculated at checkout</Text>
             </View>
             <View style={s.totalRow}>
-              <Text style={s.totalLabel}>Total</Text>
-              <Text style={s.totalValue}>₹{cart.estimatedTotal}</Text>
+              <Text style={s.totalLabel}>Items total</Text>
+              <Text style={s.totalValue}>₹{subtotal()}</Text>
             </View>
           </View>
 
-          {!cart.meetsMinimum && (
-            <Text style={s.warn}>Minimum order is ₹{cart.minOrderAmount}</Text>
-          )}
+          <Text style={s.feeNote}>
+            <Ionicons name="information-circle-outline" size={12} color={colors.textMuted} />
+            {'  '}Delivery fee is calculated based on your address at checkout.
+          </Text>
 
           <Btn
-            title={`Checkout  •  ₹${cart.estimatedTotal}`}
+            title={`Proceed to Checkout  •  ₹${subtotal()}`}
             onPress={() => navigation.navigate('Checkout')}
-            disabled={!cart.meetsMinimum}
             style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 16 }}
           />
         </>
@@ -113,20 +130,25 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   title: {
     fontSize: 24,
     fontWeight: '800',
     color: '#fff',
     marginBottom: 2,
   },
+  clearText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '600',
+  },
   subtitle: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.8)',
-  },
-  load: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    marginTop: 40,
   },
   list: {
     paddingHorizontal: 16,
@@ -134,53 +156,77 @@ const s = StyleSheet.create({
     paddingBottom: 8,
   },
   item: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.white,
     borderRadius: radius.md,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadow.sm,
   },
+  itemTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  itemBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  vegDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 2,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  vegDotInner: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
   itemName: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.text,
+    flex: 1,
+  },
+  itemSubtotal: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    flexShrink: 0,
   },
   itemPrice: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 2,
   },
   qtyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primaryBg,
     borderRadius: radius.sm,
-    marginHorizontal: 10,
     borderWidth: 1,
     borderColor: '#FBCDD0',
+    width: 100,                    // fixed width — always shows all 3 elements
   },
   qtyBtn: {
-    padding: 6,
-    paddingHorizontal: 8,
+    width: 34,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   qtyText: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '700',
     color: colors.primary,
-    paddingHorizontal: 4,
-    minWidth: 20,
     textAlign: 'center',
-  },
-  subtotal: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.text,
-    minWidth: 52,
-    textAlign: 'right',
   },
   summaryCard: {
     backgroundColor: colors.white,
@@ -224,11 +270,18 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: colors.primary,
   },
-  warn: {
-    color: colors.warning,
-    fontSize: 12,
+  qtyMinus: {
+    fontSize: 20,
+    fontWeight: '300',
+    color: colors.primary,
+    lineHeight: 22,
+  },
+  feeNote: {
+    color: colors.textMuted,
+    fontSize: 11,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 6,
     marginHorizontal: 16,
+    lineHeight: 16,
   },
 });
