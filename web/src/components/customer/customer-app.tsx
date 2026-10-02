@@ -331,8 +331,13 @@ function CustomerHome({ onOpenRestaurant }: { onOpenRestaurant: (id: string) => 
  onClick={() => onOpenRestaurant(r.id)}
  className="w-full bg-white border border-slate-200 rounded-xl p-3 flex items-start gap-3 hover:border-orange-300 hover:shadow-sm transition-all text-left"
  >
- <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center text-orange-500 text-lg font-semibold shrink-0">
- {r.name.charAt(0)}
+ <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center text-orange-500 text-lg font-semibold shrink-0 overflow-hidden">
+ {r.logoUrl ? (
+ // eslint-disable-next-line @next/next/no-img-element
+ <img src={r.logoUrl} alt={r.name} className="w-full h-full object-cover" />
+ ) : (
+ r.name.charAt(0)
+ )}
  </div>
  <div className="flex-1 min-w-0">
  <div className="flex items-center justify-between gap-2">
@@ -449,6 +454,11 @@ function CustomerRestaurant({ restaurantId, onGoToCart }: { restaurantId: string
  <p className="text-sm font-medium text-slate-700 mt-1">₹{item.price}</p>
  {unavailable && <p className="text-[10px] text-red-500 mt-1">Currently unavailable</p>}
  </div>
+ {/* Item image — shown when uploaded, otherwise nothing (keeps the card compact) */}
+ {item.imageUrl && (
+ // eslint-disable-next-line @next/next/no-img-element
+ <img src={item.imageUrl} alt={item.name} className="w-16 h-16 rounded-lg object-cover shrink-0" />
+ )}
  <div className="shrink-0">
  {inCart ? (
  <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-1 py-1">
