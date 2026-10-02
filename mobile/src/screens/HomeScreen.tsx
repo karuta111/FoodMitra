@@ -13,6 +13,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -37,17 +38,55 @@ interface PromoBanner {
 }
 
 // ─── Banner carousel ──────────────────────────────────────────────────────────
+function AnimatedDot({ isActive }: { isActive: boolean }) {
+  const anim = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: isActive ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [isActive]);
+
+  const width = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [6, 14],
+  });
+
+  const backgroundColor = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.border, colors.primary],
+  });
+
+  return <Animated.View style={[bs.dot, { width, backgroundColor }]} />;
+}
+
 function BannerCarousel() {
   const [banners, setBanners] = useState<PromoBanner[]>([]);
   const [active, setActive] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+  const activeRef = useRef(0);
 
   useEffect(() => {
     api.get<PromoBanner[]>('/promo-banners').then(setBanners).catch(() => { });
   }, []);
 
+  // ── Auto-scroll every 2.5 seconds ────────────────────────────────────────
+  useEffect(() => {
+    if (banners.length < 2) return;
+    const timer = setInterval(() => {
+      const next = (activeRef.current + 1) % banners.length;
+      activeRef.current = next;
+      setActive(next);
+      scrollRef.current?.scrollTo({ x: next * (SCREEN_W - 4), animated: true });
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [banners.length]);
+
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const idx = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_W - 4));
+    activeRef.current = idx;
     setActive(idx);
   };
 
@@ -79,7 +118,7 @@ function BannerCarousel() {
       {banners.length > 1 && (
         <View style={bs.dots}>
           {banners.map((_, i) => (
-            <View key={i} style={[bs.dot, i === active && bs.dotActive]} />
+            <AnimatedDot key={i} isActive={i === active} />
           ))}
         </View>
       )}
@@ -328,11 +367,7 @@ const bs = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: colors.border,
   },
-  dotActive: {
-    backgroundColor: colors.primary,
-    width: 20,
-    borderRadius: 3,
-  },
+  // active dot styles are handled via AnimatedDot inline styles
 });
 
 // ─── Badge styles ─────────────────────────────────────────────────────────────

@@ -8,9 +8,13 @@ import {
   ActivityIndicator,
   SafeAreaView,
   StatusBar,
+  ImageBackground,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow } from '../theme/colors';
+
+// ─── Background image (shared across all screens) ────────────────────────────
+const BG_IMAGE = require('../../assets/bg_pattern.png');
 
 // ─── Screen wrapper ──────────────────────────────────────────────────────────
 export const Screen = ({ children, style, grey }: any) => (
@@ -20,8 +24,15 @@ export const Screen = ({ children, style, grey }: any) => (
       style,
     ]}
   >
-    <StatusBar barStyle="dark-content" backgroundColor={grey ? colors.backgroundGrey : colors.background} />
-    {children}
+    <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+    <ImageBackground
+      source={BG_IMAGE}
+      style={{ flex: 1 }}
+      resizeMode="cover"
+      imageStyle={{ opacity: 0.2 }}
+    >
+      {children}
+    </ImageBackground>
   </SafeAreaView>
 );
 
