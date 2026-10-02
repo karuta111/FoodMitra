@@ -200,7 +200,7 @@ export default function HomeScreen({ navigation }: any) {
   return (
     <Screen>
       {/* ── Hero header ── */}
-      <View style={[s.hero, { paddingTop: Math.max(insets.top, 14) }]}>
+      <View style={[s.hero, { paddingTop: Math.max(insets.top + 10, 24) }]}>
         <View style={s.heroTop}>
           <View>
             <Text style={s.hello}>Hello, {user?.fullName?.split(' ')[0] || 'there'} 👋</Text>
@@ -278,31 +278,7 @@ export default function HomeScreen({ navigation }: any) {
         }
       />
 
-      {/* ── Bottom nav ── */}
-      <View style={s.bottomNav}>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Home')}>
-          <View style={s.navIconActive}>
-            <Ionicons name="home" size={20} color={colors.primary} />
-          </View>
-          <Text style={s.navTextA}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('OrderHistory')}>
-          <Ionicons name="document-text-outline" size={22} color={colors.textMuted} />
-          <Text style={s.navText}>Orders</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Offers')}>
-          <Ionicons name="pricetag-outline" size={22} color={colors.textMuted} />
-          <Text style={s.navText}>Offers</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Cart')}>
-          <Ionicons name="cart-outline" size={22} color={colors.textMuted} />
-          <Text style={s.navText}>Cart</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Profile')}>
-          <Ionicons name="person-outline" size={22} color={colors.textMuted} />
-          <Text style={s.navText}>Profile</Text>
-        </TouchableOpacity>
-      </View>
+
 
       <LocationPickerModal
         visible={showLocationModal}
@@ -454,7 +430,7 @@ const s = StyleSheet.create({
   hero: {
     backgroundColor: colors.primary,
     paddingHorizontal: 20,
-    paddingTop: 14,
+    paddingTop: 20,
     paddingBottom: 32,
   },
   heroTop: {
@@ -545,22 +521,5 @@ const s = StyleSheet.create({
   },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
   emptySubtitle: { fontSize: 13, color: colors.textSecondary },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingBottom: 10,
-    paddingTop: 6,
-    ...shadow.lg,
-  },
-  navItem: { flex: 1, alignItems: 'center', paddingVertical: 2 },
-  navIconActive: {
-    backgroundColor: colors.primaryBg,
-    borderRadius: radius.sm,
-    padding: 4,
-    marginBottom: 1,
-  },
-  navText: { fontSize: 10, color: colors.textMuted, marginTop: 3 },
-  navTextA: { fontSize: 10, color: colors.primary, fontWeight: '700', marginTop: 1 },
+
 });
