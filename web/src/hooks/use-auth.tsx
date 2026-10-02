@@ -29,7 +29,6 @@ interface RegisterInput {
  fullName: string;
  phone: string; // mobile number — primary identifier
  password: string;
- otp?: string; // 6-digit OTP (required in demo mode; not needed when MSG91 widget pre-verifies the phone)
  dateOfBirth?: string; // ISO YYYY-MM-DD — used by admin "today's birthdays" view
  anniversaryDate?: string; // ISO YYYY-MM-DD — used by admin "today's anniversaries" view
 }
