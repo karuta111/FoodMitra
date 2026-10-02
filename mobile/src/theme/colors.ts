@@ -5,6 +5,8 @@ export const colors = {
   primaryDark: '#C0392B',
   primaryLight: '#F5F5F5',          // neutral grey, not red-tinted
 
+  primaryBg: '#FDECEA',          // light red tint for backgrounds
+
   // Backgrounds
   background: '#FFFFFF',
   backgroundGrey: '#F8F8F8',

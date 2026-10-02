@@ -1,71 +1,524 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  RefreshControl,
+  StyleSheet,
+  TextInput,
+  Image,
+  ScrollView,
+  Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { api, ApiError } from '../api/client';
+import { api } from '../api/client';
 import { useAuthStore } from '../store/auth';
-import { colors } from '../theme/colors';
-import { Screen, EmptyState } from '../components/ui';
+import { colors, radius, shadow } from '../theme/colors';
+import { Screen } from '../components/ui';
 import type { Restaurant } from '../types';
 
+const { width: SCREEN_W } = Dimensions.get('window');
+
+// Banner aspect ratio: 1040 × 450
+const BANNER_H = Math.round((SCREEN_W - 4) * (450 / 1040));
+
+interface PromoBanner {
+  id: string;
+  imageUrl: string;
+  title: string | null;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+// ─── Banner carousel ──────────────────────────────────────────────────────────
+function BannerCarousel() {
+  const [banners, setBanners] = useState<PromoBanner[]>([]);
+  const [active, setActive] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    api.get<PromoBanner[]>('/promo-banners').then(setBanners).catch(() => { });
+  }, []);
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_W - 4));
+    setActive(idx);
+  };
+
+  if (banners.length === 0) return null;
+
+  return (
+    <View style={bs.outer}>
+      {/* Image box — overflow hidden for border radius */}
+      <View style={bs.wrap}>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          snapToInterval={SCREEN_W - 4}
+          decelerationRate="fast"
+        >
+          {banners.map((b) => (
+            <View key={b.id} style={bs.slide}>
+              <Image source={{ uri: b.imageUrl }} style={bs.img} resizeMode="cover" />
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Dot indicators — outside the clipped box */}
+      {banners.length > 1 && (
+        <View style={bs.dots}>
+          {banners.map((_, i) => (
+            <View key={i} style={[bs.dot, i === active && bs.dotActive]} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Open / Closed badge ──────────────────────────────────────────────────────
+function StatusBadge({ isOpen }: { isOpen: boolean }) {
+  return (
+    <View style={[badge.pill, isOpen ? badge.openPill : badge.closedPill]}>
+      <View style={[badge.dot, isOpen ? badge.openDot : badge.closedDot]} />
+      <Text style={[badge.label, isOpen ? badge.openLabel : badge.closedLabel]}>
+        {isOpen ? 'Open' : 'Closed'}
+      </Text>
+    </View>
+  );
+}
+
+// ─── Restaurant card ──────────────────────────────────────────────────────────
+function RestaurantCard({ item, onPress }: { item: Restaurant; onPress: () => void }) {
+  const isOpen = item.availability === 'OPEN';
+  const firstLetter = item.name.charAt(0).toUpperCase();
+
+  return (
+    <TouchableOpacity
+      style={[cs.card, !isOpen && cs.cardClosed]}
+      activeOpacity={0.82}
+      onPress={onPress}
+    >
+      {/* Thumbnail */}
+      <View style={cs.imgWrap}>
+        {item.logoUrl ? (
+          <Image source={{ uri: item.logoUrl }} style={cs.img} resizeMode="cover" />
+        ) : (
+          <View style={cs.imgFallback}>
+            <Text style={cs.imgLetter}>{firstLetter}</Text>
+          </View>
+        )}
+        {!isOpen && <View style={cs.closedOverlay} />}
+      </View>
+
+      {/* Details */}
+      <View style={cs.info}>
+        {/* Name + badge row */}
+        <View style={cs.nameRow}>
+          <Text style={cs.name} numberOfLines={1}>{item.name}</Text>
+          <StatusBadge isOpen={isOpen} />
+        </View>
+
+        {/* Cuisine */}
+        <Text style={cs.cuisine} numberOfLines={1}>{item.cuisine}</Text>
+
+        {/* Divider */}
+        <View style={cs.divider} />
+
+        {/* Bottom meta row */}
+        <View style={cs.bottomRow}>
+          <Ionicons name="time-outline" size={12} color={colors.textMuted} />
+          <Text style={cs.metaText}>20–35 min</Text>
+          <View style={cs.metaDot} />
+          <Ionicons name="bicycle-outline" size={13} color={colors.textMuted} />
+          <Text style={cs.metaText}>Free delivery</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }: any) {
   const { user } = useAuthStore();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
 
   const load = useCallback(async () => {
-    try { const res = await api.get<{ items: Restaurant[]; total: number }>('/restaurants?page=1&pageSize=50'); setRestaurants(res.items); }
-    catch (e) {} finally { setLoading(false); setRefreshing(false); }
+    try {
+      const res = await api.get<{ items: Restaurant[]; total: number }>('/restaurants?page=1&pageSize=50');
+      setRestaurants(res.items);
+    } catch (e) {
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
+  const filtered = search.trim()
+    ? restaurants.filter(
+      (r) =>
+        r.name.toLowerCase().includes(search.toLowerCase()) ||
+        r.cuisine.toLowerCase().includes(search.toLowerCase()),
+    )
+    : restaurants;
+
+  const ListHeader = (
+    <>
+      {/* Banner / Offers carousel */}
+      <BannerCarousel />
+
+      {/* Section header */}
+      <View style={s.sectionHeader}>
+        <Text style={s.sectionTitle}>All Restaurants</Text>
+        <Text style={s.sectionCount}>{filtered.length} places</Text>
+      </View>
+    </>
+  );
+
   return (
     <Screen>
-      <View style={s.hero}><Text style={s.hello}>Hello, {user?.fullName || 'there'} 👋</Text><Text style={s.hTitle}>Hungry? Let's get you fed.</Text></View>
-      <Text style={s.sectionTitle}>All Restaurants</Text>
+      {/* ── Hero header ── */}
+      <View style={s.hero}>
+        <View style={s.heroTop}>
+          <View>
+            <Text style={s.hello}>Hello, {user?.fullName?.split(' ')[0] || 'there'} 👋</Text>
+            <Text style={s.hTitle}>What are you craving{'\n'}today?</Text>
+          </View>
+          <TouchableOpacity
+            style={s.notifBtn}
+            onPress={() => navigation.navigate('Notifications')}
+          >
+            <Ionicons name="notifications-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ── Search bar (floats below hero) ── */}
+      <View style={s.searchWrap}>
+        <View style={s.searchBox}>
+          <Ionicons name="search" size={18} color={colors.primary} style={{ marginRight: 8 }} />
+          <TextInput
+            style={s.searchInput}
+            placeholder="Search restaurants or dishes..."
+            placeholderTextColor={colors.textMuted}
+            value={search}
+            onChangeText={setSearch}
+            returnKeyType="search"
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* ── Restaurant list ── */}
       <FlatList
-        data={restaurants}
+        data={filtered}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={s.card} onPress={() => navigation.navigate('Restaurant', { restaurantId: item.id, restaurantName: item.name })}>
-            <View style={s.logo}><Text style={s.logoText}>{item.name.charAt(0)}</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.cardName}>{item.name}</Text>
-              <Text style={s.cardCuisine}>{item.cuisine}</Text>
-              {item.ratingCount > 0 && <Text style={s.meta}>★ {item.avgRating.toFixed(1)} ({item.ratingCount})</Text>}
-              <Text style={[s.badge, { color: item.availability === 'OPEN' ? colors.success : colors.textMuted }]}>{item.availability.toLowerCase()}</Text>
-            </View>
-          </TouchableOpacity>
+          <RestaurantCard
+            item={item}
+            onPress={() => navigation.navigate('Restaurant', { restaurantId: item.id, restaurantName: item.name })}
+          />
         )}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
-        ListEmptyComponent={loading ? <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 40 }}>Loading...</Text> : <EmptyState title="No restaurants found" />}
+        contentContainerStyle={s.listContent}
+        ListHeaderComponent={ListHeader}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); load(); }}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
+        ListEmptyComponent={
+          loading ? (
+            <View style={s.loadingWrap}>
+              <ActivityIndicator color={colors.primary} size="large" />
+              <Text style={s.loadingText}>Finding great restaurants…</Text>
+            </View>
+          ) : (
+            <View style={s.emptyWrap}>
+              <View style={s.emptyIconWrap}>
+                <Ionicons name="storefront-outline" size={44} color={colors.primary} />
+              </View>
+              <Text style={s.emptyTitle}>No restaurants found</Text>
+              <Text style={s.emptySubtitle}>Try adjusting your search</Text>
+            </View>
+          )
+        }
       />
+
+      {/* ── Bottom nav ── */}
       <View style={s.bottomNav}>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Home')}><Ionicons name="home" size={22} color={colors.primary} /><Text style={s.navTextA}>Home</Text></TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('OrderHistory')}><Ionicons name="clipboard" size={22} color={colors.textMuted} /><Text style={s.navText}>Orders</Text></TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Cart')}><Ionicons name="cart" size={22} color={colors.textMuted} /><Text style={s.navText}>Cart</Text></TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Profile')}><Ionicons name="person" size={22} color={colors.textMuted} /><Text style={s.navText}>Profile</Text></TouchableOpacity>
+        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Home')}>
+          <View style={s.navIconActive}>
+            <Ionicons name="home" size={20} color={colors.primary} />
+          </View>
+          <Text style={s.navTextA}>Home</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('OrderHistory')}>
+          <Ionicons name="document-text-outline" size={22} color={colors.textMuted} />
+          <Text style={s.navText}>Orders</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Offers')}>
+          <Ionicons name="pricetag-outline" size={22} color={colors.textMuted} />
+          <Text style={s.navText}>Offers</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Cart')}>
+          <Ionicons name="cart-outline" size={22} color={colors.textMuted} />
+          <Text style={s.navText}>Cart</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('Profile')}>
+          <Ionicons name="person-outline" size={22} color={colors.textMuted} />
+          <Text style={s.navText}>Profile</Text>
+        </TouchableOpacity>
       </View>
     </Screen>
   );
 }
 
+// ─── Banner styles ────────────────────────────────────────────────────────────
+const bs = StyleSheet.create({
+  outer: {
+    marginTop: 14,
+    marginHorizontal: 2,
+  },
+  wrap: {
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    ...shadow.md,
+  },
+  slide: {
+    width: SCREEN_W - 4,
+    height: BANNER_H,
+  },
+  img: {
+    width: '100%',
+    height: '100%',
+  },
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingTop: 10,
+    paddingBottom: 2,
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+  },
+  dotActive: {
+    backgroundColor: colors.primary,
+    width: 20,
+    borderRadius: 3,
+  },
+});
+
+// ─── Badge styles ─────────────────────────────────────────────────────────────
+const badge = StyleSheet.create({
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    gap: 4,
+  },
+  openPill: {
+    backgroundColor: '#E8F5F0',
+    borderWidth: 1,
+    borderColor: '#B2DFDB',
+  },
+  closedPill: {
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  openDot: { backgroundColor: '#00897B' },
+  closedDot: { backgroundColor: '#9E9E9E' },
+  label: { fontSize: 11, fontWeight: '600', letterSpacing: 0.2 },
+  openLabel: { color: '#00695C' },
+  closedLabel: { color: '#757575' },
+});
+
+// ─── Card styles ──────────────────────────────────────────────────────────────
+const cs = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    ...shadow.sm,
+  },
+  cardClosed: {
+    opacity: 0.72,
+  },
+  imgWrap: { width: 110, height: 110, position: 'relative' },
+  img: { width: '100%', height: '100%' },
+  imgFallback: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.primaryBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imgLetter: { fontSize: 38, fontWeight: '800', color: colors.primary },
+  closedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.40)',
+  },
+  info: { flex: 1, paddingHorizontal: 12, paddingVertical: 10, justifyContent: 'space-between' },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  name: { fontSize: 15, fontWeight: '700', color: colors.text, flex: 1 },
+  cuisine: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  divider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: 6,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaText: { fontSize: 11, color: colors.textMuted },
+  metaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: colors.textLight,
+    marginHorizontal: 2,
+  },
+});
+
+// ─── Screen styles ────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  hero: { backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 24 },
-  hello: { fontSize: 13, color: '#fff', opacity: 0.9 },
-  hTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginTop: 4 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: colors.text, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
-  card: { flexDirection: 'row', backgroundColor: colors.white, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border, gap: 12 },
-  logo: { width: 48, height: 48, borderRadius: 10, backgroundColor: colors.primaryBg, justifyContent: 'center', alignItems: 'center' },
-  logoText: { fontSize: 20, fontWeight: '600', color: colors.primary },
-  cardName: { fontSize: 15, fontWeight: '600', color: colors.text },
-  cardCuisine: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  meta: { fontSize: 11, color: colors.textSecondary, marginTop: 4 },
-  badge: { fontSize: 11, fontWeight: '500', marginTop: 2 },
-  bottomNav: { flexDirection: 'row', backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.border, paddingBottom: 8, paddingTop: 4 },
-  navItem: { flex: 1, alignItems: 'center' },
-  navText: { fontSize: 10, color: colors.textMuted, marginTop: 2 },
-  navTextA: { fontSize: 10, color: colors.primary, fontWeight: '600', marginTop: 2 },
+  hero: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 32,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  hello: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 4,
+  },
+  hTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+    lineHeight: 30,
+  },
+  notifBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  searchWrap: {
+    marginTop: -22,
+    marginHorizontal: 16,
+    marginBottom: 4,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: radius.xl,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    ...shadow.md,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    paddingVertical: 0,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 100,
+  },
+  sectionHeader: {
+    marginTop: 20,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  sectionCount: { fontSize: 12, color: colors.textMuted, fontWeight: '500' },
+  loadingWrap: { alignItems: 'center', paddingTop: 60, gap: 14 },
+  loadingText: { fontSize: 14, color: colors.textSecondary },
+  emptyWrap: { alignItems: 'center', paddingTop: 60, gap: 10 },
+  emptyIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primaryBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
+  emptySubtitle: { fontSize: 13, color: colors.textSecondary },
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingBottom: 10,
+    paddingTop: 6,
+    ...shadow.lg,
+  },
+  navItem: { flex: 1, alignItems: 'center', paddingVertical: 2 },
+  navIconActive: {
+    backgroundColor: colors.primaryBg,
+    borderRadius: radius.sm,
+    padding: 4,
+    marginBottom: 1,
+  },
+  navText: { fontSize: 10, color: colors.textMuted, marginTop: 3 },
+  navTextA: { fontSize: 10, color: colors.primary, fontWeight: '700', marginTop: 1 },
 });

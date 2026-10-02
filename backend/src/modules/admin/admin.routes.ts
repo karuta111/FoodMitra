@@ -11,6 +11,9 @@ import { paginationSchema, restaurantActionSchema, assignRiderSchema, categoryBo
 import { asyncHandler, ok, noContent } from '@/lib/api-response';
 import { requireRoles } from '@/middleware/auth';
 import { z } from 'zod';
+import path from "path";
+import cloudinary from '../../lib/integrations/cloudinary';
+
 
 const router = Router();
 
@@ -337,15 +340,27 @@ router.get('/customers/milestones', asyncHandler(async (req, res) => {
 
 async function saveBase64Image(dataUrl: string): Promise<string> {
   const m = dataUrl.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-  if (!m) throw AppError.badRequest('Invalid image data URL — expected data:image/...;base64,...');
-  const mime = m[1];
-  const base64 = m[2];
-  const ext = mime.split('/')[1] === 'jpeg' ? 'jpg' : mime.split('/')[1];
-  const filename = `banner_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const filePath = `/home/z/my-project/upload/promo-banners/${filename}`;
-  const fs = await import('node:fs/promises');
-  await fs.writeFile(filePath, Buffer.from(base64, 'base64'));
-  return `/uploads/promo-banners/${filename}`;
+
+  if (!m) {
+    throw AppError.badRequest(
+      "Invalid image data URL — expected data:image/...;base64,..."
+    );
+  }
+
+  try {
+    const result = await cloudinary.uploader.upload(dataUrl, {
+      folder: "promo-banners",
+      resource_type: "image",
+    });
+
+    return result.secure_url;
+  } catch (error) {
+    console.error("Cloudinary upload failed:", error);
+
+    throw (
+      "Failed to upload promo banner"
+    );
+  }
 }
 
 router.get('/promo-banners', asyncHandler(async (_req, res) => {
