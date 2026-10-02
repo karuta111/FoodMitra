@@ -72,12 +72,14 @@ router.patch(
 );
 
 // DELETE /api/v1/menu/items/:id
+// If the item has past orders, it's marked UNAVAILABLE instead of hard-deleted (preserves order history).
+// Returns { action: 'deleted' | 'unavailable', message } so the frontend can show the right toast.
 router.delete(
   '/items/:id',
   requireRoles('ADMIN'),
   asyncHandler(async (req, res) => {
-    await MenuService.deleteItem(req.params.id as string, req.auth!);
-    return noContent(res);
+    const result = await MenuService.deleteItem(req.params.id as string, req.auth!);
+    return ok(res, result);
   }),
 );
 

@@ -713,10 +713,16 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
 
  const deleteItem = async (id: string) => {
  try {
- await api.delete(`/api/v1/menu/items/${id}`);
- toast.success('Item deleted');
+ // Backend returns { action: 'deleted' | 'unavailable', message } — if the item has past
+ // orders it's soft-removed (marked UNAVAILABLE) instead of hard-deleted to preserve order history.
+ const result = await api.delete<{ action: 'deleted' | 'unavailable'; message: string }>(`/api/v1/menu/items/${id}`);
+ if (result?.action === 'unavailable') {
+ toast.info(result.message || 'Item marked as Unavailable (has past orders).');
+ } else {
+ toast.success(result?.message || 'Item deleted');
+ }
  load();
- } catch (e) { toastApiError(e, 'Failed'); }
+ } catch (e) { toastApiError(e, 'Failed to delete item'); }
  };
 
  // Toggle item availability via the dedicated PATCH endpoint
