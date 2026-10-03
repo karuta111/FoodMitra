@@ -21,12 +21,6 @@ type CustomerScreen =
  | 'forgot_phone' // phone entry (step 1 of forgot password)
  | 'forgot_reset'; // OTP + new password (step 2 of forgot password)
 
-// Demo credentials for the login screen
-const ADMIN_PHONE = process.env.NEXT_PUBLIC_ADMIN_PHONE || '+919999999999';
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'admin123';
-const DEMO_CUSTOMER_PHONE = '+919800001000';
-const DEMO_CUSTOMER_PASSWORD = 'customer123';
-
 export function LoginPage() {
  const { login, register } = useAuth();
  const [screen, setScreen] = useState<CustomerScreen>('login');
@@ -322,21 +316,6 @@ export function LoginPage() {
  <Button type="submit" disabled={loading} className="w-full bg-orange-500 hover:bg-orange-600 h-10">
  {loading ? 'Logging in…' : 'Log in'}
  </Button>
-
- {/* Demo credentials — both admin + customer use the same form */}
- <div className="mt-2 pt-4 border-t border-slate-100 space-y-2">
- <p className="text-xs font-medium text-slate-500 text-center">Demo credentials</p>
- <div className="grid grid-cols-1 gap-1.5 text-xs">
- <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded">
- <span className="text-slate-600">Admin</span>
- <code className="font-mono text-slate-700">{ADMIN_PHONE} / {ADMIN_PASSWORD}</code>
- </div>
- <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded">
- <span className="text-slate-600">Customer</span>
- <code className="font-mono text-slate-700">{DEMO_CUSTOMER_PHONE} / {DEMO_CUSTOMER_PASSWORD}</code>
- </div>
- </div>
- </div>
  </form>
  )}
 
