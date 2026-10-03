@@ -1,0 +1,4 @@
+[build]
+  # These are intentionally public (NEXT_PUBLIC_ prefix → inlined into client bundle by design)
+  # Listed here so Netlify's secrets scanner doesn't flag them.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_ADMIN_PHONE,NEXT_PUBLIC_ADMIN_PASSWORD,NEXT_PUBLIC_MSG91_AUTH_KEY,NEXT_PUBLIC_MSG91_WIDGET_ID,NEXT_PUBLIC_MSG91_WIDGET_NAME,NEXT_PUBLIC_API_BASE_URL"
