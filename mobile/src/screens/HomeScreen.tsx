@@ -126,11 +126,10 @@ function BannerCarousel() {
   );
 }
 
-// ─── Restaurant card (Zomato-style vertical) ─────────────────────────────────
+// ─── Restaurant card (Compact horizontal) ─────────────────────────────────
 function RestaurantCard({ item, onPress }: { item: Restaurant; onPress: () => void }) {
   const isOpen = item.availability === 'OPEN';
   const firstLetter = item.name.charAt(0).toUpperCase();
-  const hasRating = item.avgRating > 0;
 
   return (
     <TouchableOpacity
@@ -138,46 +137,41 @@ function RestaurantCard({ item, onPress }: { item: Restaurant; onPress: () => vo
       activeOpacity={0.88}
       onPress={onPress}
     >
-      {/* ── Cover image ── */}
-      <View style={cs.imgWrap}>
+      {/* ── Left: Avatar/Logo ── */}
+      <View style={cs.avatarWrap}>
         {item.logoUrl ? (
-          <Image source={{ uri: item.logoUrl }} style={cs.img} resizeMode="cover" />
+          <Image source={{ uri: item.logoUrl }} style={cs.avatar} resizeMode="cover" />
         ) : (
-          <View style={cs.imgFallback}>
-            <Text style={cs.imgLetter}>{firstLetter}</Text>
-          </View>
-        )}
-
-        {/* Closed overlay */}
-        {!isOpen && (
-          <View style={cs.closedOverlay}>
-            <View style={cs.closedBadge}>
-              <Text style={cs.closedBadgeText}>Closed</Text>
-            </View>
+          <View style={cs.avatarFallback}>
+            <Text style={cs.avatarLetter}>{firstLetter}</Text>
           </View>
         )}
       </View>
 
-      {/* ── Details ── */}
+      {/* ── Right: Details ── */}
       <View style={cs.info}>
-        {/* Name + Rating */}
+        {/* Name + Status Badge */}
         <View style={cs.nameRow}>
           <Text style={cs.name} numberOfLines={1}>{item.name}</Text>
-          {/* {hasRating && (
-            <View style={cs.ratingPill}>
-              <Ionicons name="star" size={10} color="#fff" />
-              <Text style={cs.ratingText}>{item.avgRating.toFixed(1)}</Text>
-            </View>
-          )} */}
+          <View style={[cs.statusBadge, !isOpen && cs.statusBadgeClosed]}>
+            <View style={[cs.statusDot, !isOpen && cs.statusDotClosed]} />
+            <Text style={[cs.statusText, !isOpen && cs.statusTextClosed]}>
+              {isOpen ? 'Open' : 'Closed'}
+            </Text>
+          </View>
         </View>
 
         {/* Cuisine */}
         <Text style={cs.cuisine} numberOfLines={1}>{item.cuisine}</Text>
 
-        {/* Divider */}
-        {/* <View style={cs.divider} /> */}
-
-        
+        {/* Meta row: time · delivery */}
+        <View style={cs.metaRow}>
+          <Ionicons name="time-outline" size={12} color={colors.textMuted} />
+          <Text style={cs.metaText}>20–35 min</Text>
+          <View style={cs.metaDot} />
+          <Ionicons name="bicycle-outline" size={12} color={colors.textMuted} />
+          <Text style={cs.metaText}>Free delivery</Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -365,83 +359,55 @@ const bs = StyleSheet.create({
   // active dot styles are handled via AnimatedDot inline styles
 });
 
-// ─── Card styles (Zomato vertical) ───────────────────────────────────────────
-const CARD_IMG_H = Math.round((SCREEN_W - 32) * 0.52); // ~52% aspect ratio
-
+// ─── Card styles (Compact horizontal) ───────────────────────────────────────
 const cs = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
-    marginBottom: 20,
-    overflow: 'hidden',
-    ...shadow.md,
-  },
-  cardClosed: {
-    opacity: 0.7,
-  },
-
-  // ── Cover image ──
-  imgWrap: {
-    width: '100%',
-    height: CARD_IMG_H,
-    position: 'relative',
-  },
-  img: { width: '100%', height: '100%' },
-  imgFallback: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: colors.primaryBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imgLetter: { fontSize: 52, fontWeight: '800', color: colors.primary },
-
-  // closed state
-  closedOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closedBadge: {
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  closedBadgeText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-
-  // offer badge at the bottom-left of the image
-  offerBadge: {
-    position: 'absolute',
-    bottom: 10,
-    left: 10,
+    marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.58)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
+    // alignItems: 'stretch', // important
+    height: 100,
+    overflow: 'hidden',
+    ...shadow.sm,
   },
-  offerText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
+  cardClosed: {
+    opacity: 0.65,
   },
 
-  // ── Details ──
+  // ── Left: Avatar/Logo ──
+  avatarWrap: {
+    width: 100,
+    height: '100%',
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  avatar: {
+  width: '100%',
+  height: '100%',
+},
+  avatarFallback: {
+    width: 90,
+    height: 90,
+    backgroundColor: '#FFE8E8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarLetter: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+
+  // ── Right: Details ──
   info: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 14,
+    flex: 1,
+    justifyContent: 'center',
+    gap: 5,
+    paddingLeft: 14,
+    paddingRight: 14,
+    paddingVertical: 14,
   },
   nameRow: {
     flexDirection: 'row',
@@ -456,35 +422,44 @@ const cs = StyleSheet.create({
     flex: 1,
   },
 
-  // Zomato green rating pill
-  ratingPill: {
+  // Status badge (Open/Closed)
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#1BA672',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    gap: 4,
+    backgroundColor: '#E8F5F0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: radius.sm,
   },
-  ratingText: {
-    color: '#fff',
-    fontSize: 12,
+  statusBadgeClosed: {
+    backgroundColor: '#F5E8E8',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1BA672',
+  },
+  statusDotClosed: {
+    backgroundColor: '#E85454',
+  },
+  statusText: {
+    fontSize: 11,
     fontWeight: '700',
+    color: '#1BA672',
+  },
+  statusTextClosed: {
+    color: '#E85454',
   },
 
   cuisine: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.textSecondary,
-    marginTop: 3,
+    fontWeight: '400',
   },
 
-  divider: {
-    height: 1,
-    backgroundColor: colors.borderLight,
-    marginVertical: 10,
-  },
-
-  // bottom meta row  (time · distance · price)
+  // Meta row (time · delivery)
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -493,13 +468,13 @@ const cs = StyleSheet.create({
   metaText: {
     fontSize: 12,
     color: colors.textMuted,
-    fontWeight: '500',
+    fontWeight: '400',
   },
   metaDot: {
     width: 3,
     height: 3,
     borderRadius: 2,
-    backgroundColor: colors.textLight,
+    backgroundColor: colors.textMuted,
     marginHorizontal: 2,
   },
 });
