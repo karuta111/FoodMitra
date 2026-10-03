@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   View,
   Text,
+  Image,
   SectionList,
   TouchableOpacity,
   StyleSheet,
@@ -50,7 +51,15 @@ function MenuItemCard({
       {/* Right column: image on top, ADD/stepper below */}
       <View style={mc.rightCol}>
         <View style={mc.imgPlaceholder}>
-          <Ionicons name="fast-food-outline" size={28} color="#D0D0D0" />
+          {item.imageUrl ? (
+            <Image
+              source={{ uri: item.imageUrl }}
+              style={{ width: '100%', height: '100%', borderRadius: radius.md }}
+              resizeMode="cover"
+            />
+          ) : (
+            <Ionicons name="fast-food-outline" size={28} color="#D0D0D0" />
+          )}
         </View>
 
         {cartQty > 0 ? (

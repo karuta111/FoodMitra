@@ -1,5 +1,10 @@
 {
   "plugins": [
     "@react-native-community/datetimepicker"
-  ]
+  ],
+  "extra": {
+    "eas": {
+      "projectId": "6f781c06-1833-496a-984c-8555d4676953"
+    }
+  }
 }
