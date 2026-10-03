@@ -6,5 +6,10 @@
     "eas": {
       "projectId": "6f781c06-1833-496a-984c-8555d4676953"
     }
+  },
+  "expo": {
+    "android": {
+      "package": "com.omkar14.foodmitramobile"
+    }
   }
 }
