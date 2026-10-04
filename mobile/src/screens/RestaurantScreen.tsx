@@ -277,17 +277,17 @@ export default function RestaurantScreen({ route, navigation }: any) {
               <Text style={s.metaText}>Free delivery</Text>
             </View> */}
           </View>
-          {/* {rating > 0 && (
+          {/* rating badge — disabled
+          rating > 0 &&
             <View style={s.ratingBadge}>
               <Ionicons name="star" size={12} color="#fff" />
               <Text style={s.ratingText}>{rating.toFixed(1)}</Text>
-              {ratingCount > 0 && (
+              ratingCount > 0 &&
                 <Text style={s.ratingCount}>
-                  {'  '}{ratingCount > 1000 ? `${(ratingCount / 1000).toFixed(1)}k` : ratingCount}+
+                  {ratingCount > 1000 ? (ratingCount / 1000).toFixed(1) + 'k' : ratingCount}+
                 </Text>
-              )}
             </View>
-          )} */}
+          */}
         </View>
       )}
 

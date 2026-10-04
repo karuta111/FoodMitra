@@ -285,25 +285,6 @@ export default function LoginScreen() {
                   <Text style={s.switchLink}>Sign up</Text>
                 </TouchableOpacity>
               </View>
-
-              {/* Demo credentials */}
-              <View style={s.demoBox}>
-                <Text style={s.demoBoxTitle}>Demo credentials</Text>
-                <TouchableOpacity
-                  style={s.demoRow}
-                  onPress={() => { setPhone('9800001000'); setPassword('customer123'); }}
-                >
-                  <Text style={s.demoRowLabel}>Customer</Text>
-                  <Text style={s.demoRowValue}>9800001000 / customer123</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.demoRow}
-                  onPress={() => { setPhone('9999999999'); setPassword('admin123'); }}
-                >
-                  <Text style={s.demoRowLabel}>Admin</Text>
-                  <Text style={s.demoRowValue}>9999999999 / admin123</Text>
-                </TouchableOpacity>
-              </View>
             </>
           )}
 
@@ -593,14 +574,7 @@ function PasswordField({ value, onChange, show, onToggle, label, placeholder, ri
   const [focused, setFocused] = useState(false);
   return (
     <View style={sf.wrap}>
-      <View style={sf.labelRow}>
-        <Text style={sf.label}>{label || 'Password'}</Text>
-        {rightLabel && (
-          <TouchableOpacity onPress={onRightPress}>
-            <Text style={sf.forgot}>{rightLabel}</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <Text style={sf.label}>{label || 'Password'}</Text>
       <View style={[sf.row, focused && sf.focused]}>
         <TextInput
           style={[sf.input, { paddingLeft: 14 }]}
@@ -616,6 +590,11 @@ function PasswordField({ value, onChange, show, onToggle, label, placeholder, ri
           <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
+      {rightLabel && (
+        <TouchableOpacity onPress={onRightPress} style={sf.forgotWrap}>
+          <Text style={sf.forgot}>Forgot Password?</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -800,8 +779,8 @@ const s = StyleSheet.create({
 const sf = StyleSheet.create({
   wrap: { marginBottom: 14 },
   label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 },
-  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   forgot: { fontSize: 13, color: colors.primary, fontWeight: '500' },
+  forgotWrap: { alignSelf: 'flex-end', marginTop: 6 },
 
   // Phone row input
   row: {
