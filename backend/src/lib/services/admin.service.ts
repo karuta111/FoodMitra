@@ -213,54 +213,52 @@ export class AdminService {
   static async getBirthdaysOnDate(date: Date) {
     const month = date.getUTCMonth() + 1;
     const day = date.getUTCDate();
-    const monthDay = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-    // Prisma stores DateTime in SQLite as INTEGER (ms timestamp). Use strftime
-    // with the 'unixepoch' modifier (and divide by 1000 since the value is in ms).
-    const birthdays = await db.$queryRaw<
-      Array<{ id: string; fullName: string; phone: string; dateOfBirth: Date; createdAt: Date; userId: string }>
-    >`
-      SELECT
-        cp.id AS id,
-        cp."userId" AS userId,
-        cp."fullName" AS fullName,
-        u.phone AS phone,
-        cp."dateOfBirth" AS dateOfBirth,
-        cp."createdAt" AS createdAt
-      FROM "CustomerProfile" cp
-      JOIN "User" u ON u.id = cp."userId"
-      WHERE cp."dateOfBirth" IS NOT NULL
-        AND strftime('%m-%d', cp."dateOfBirth" / 1000, 'unixepoch') = ${monthDay}
-      ORDER BY cp."fullName" ASC
-    `;
+    // Use Prisma's standard findMany with EXTRACT — works on both PostgreSQL (native EXTRACT)
+    // and is portable. We filter in JS for the month+day match since Prisma doesn't support
+    // EXTRACT in where clauses directly.
+    const allProfiles = await db.customerProfile.findMany({
+      where: {
+        OR: [
+          { dateOfBirth: { not: null } },
+          { anniversaryDate: { not: null } },
+        ],
+      },
+      include: { user: { select: { phone: true } } },
+    });
 
-    const anniversaries = await db.$queryRaw<
-      Array<{ id: string; fullName: string; phone: string; anniversaryDate: Date; createdAt: Date; userId: string }>
-    >`
-      SELECT
-        cp.id AS id,
-        cp."userId" AS userId,
-        cp."fullName" AS fullName,
-        u.phone AS phone,
-        cp."anniversaryDate" AS anniversaryDate,
-        cp."createdAt" AS createdAt
-      FROM "CustomerProfile" cp
-      JOIN "User" u ON u.id = cp."userId"
-      WHERE cp."anniversaryDate" IS NOT NULL
-        AND strftime('%m-%d', cp."anniversaryDate" / 1000, 'unixepoch') = ${monthDay}
-      ORDER BY cp."fullName" ASC
-    `;
+    const birthdays = allProfiles
+      .filter((p) => {
+        if (!p.dateOfBirth) return false;
+        return p.dateOfBirth.getUTCMonth() + 1 === month && p.dateOfBirth.getUTCDate() === day;
+      })
+      .map((p) => ({
+        id: p.id,
+        userId: p.userId,
+        fullName: p.fullName,
+        phone: p.user.phone,
+        dateOfBirth: p.dateOfBirth!,
+        age: p.dateOfBirth ? date.getUTCFullYear() - p.dateOfBirth.getUTCFullYear() : null,
+      }));
+
+    const anniversaries = allProfiles
+      .filter((p) => {
+        if (!p.anniversaryDate) return false;
+        return p.anniversaryDate.getUTCMonth() + 1 === month && p.anniversaryDate.getUTCDate() === day;
+      })
+      .map((p) => ({
+        id: p.id,
+        userId: p.userId,
+        fullName: p.fullName,
+        phone: p.user.phone,
+        anniversaryDate: p.anniversaryDate!,
+        yearsMarried: p.anniversaryDate ? date.getUTCFullYear() - p.anniversaryDate.getUTCFullYear() : null,
+      }));
 
     return {
       date: date.toISOString().slice(0, 10),
-      birthdays: birthdays.map((b) => ({
-        ...b,
-        age: b.dateOfBirth ? date.getUTCFullYear() - b.dateOfBirth.getUTCFullYear() : null,
-      })),
-      anniversaries: anniversaries.map((a) => ({
-        ...a,
-        yearsMarried: a.anniversaryDate ? date.getUTCFullYear() - a.anniversaryDate.getUTCFullYear() : null,
-      })),
+      birthdays,
+      anniversaries,
     };
   }
 
