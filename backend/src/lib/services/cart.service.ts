@@ -16,6 +16,22 @@ export class CartService {
     const pricing = await PricingService.computeCartPricing(cart.id, {
       deliveryAddressId: opts.deliveryAddressId,
     });
+
+    console.log({
+      id: cart.id,
+      restaurant: {
+        id: cart.restaurant.id,
+        name: cart.restaurant.name,
+      },
+      items: pricing.items,
+      subtotal: pricing.subtotal,
+      estimatedDeliveryFee: pricing.deliveryFee,
+      deliveryFeeSource: pricing.deliveryFeeSource,
+      deliveryDistanceKm: pricing.deliveryDistanceKm,
+      estimatedTotal: pricing.totalAmount,
+      minOrderAmount: pricing.minOrderAmount,
+      meetsMinimum: pricing.meetsMinimum,
+    })
     return {
       id: cart.id,
       restaurant: {
@@ -138,6 +154,7 @@ export class CartService {
     customerId: string,
     restaurantId: string,
     items: Array<{ menuItemId: string; quantity: number }>,
+    deliveryAddressId?: string,
   ) {
     // Validate restaurant
     const restaurant = await db.restaurant.findUnique({ where: { id: restaurantId } });
@@ -185,6 +202,6 @@ export class CartService {
       });
     });
 
-    return this.getCart(customerId);
+    return this.getCart(customerId, { deliveryAddressId });
   }
 }

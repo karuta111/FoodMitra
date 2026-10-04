@@ -39,8 +39,8 @@ export default function LoginScreen() {
   const [otpReqId, setOtpReqId] = useState<string | null>(null);
   const [otpSent, setOtpSent] = useState(false);
 
-  const widgetId = "36697a71494b353338303634";
-  const tokenAuth = "575533Tzsl0DbrFc6ab802dfP1";
+  const widgetId = process.env.EXPO_PUBLIC_MSG91_WIDGET_ID!;
+  const tokenAuth = process.env.EXPO_PUBLIC_MSG91_TOKEN_AUTH!;
 
   useEffect(() => {
     OTPWidget.initializeWidget(widgetId, tokenAuth); //Widget initialization

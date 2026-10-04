@@ -63,6 +63,7 @@ export const syncCartSchema = z.object({
       }),
     )
     .min(1),
+  deliveryAddressId: z.string().min(1).optional(),
 });
 
 // Orders

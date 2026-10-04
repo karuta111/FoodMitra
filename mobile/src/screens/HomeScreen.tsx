@@ -190,6 +190,7 @@ export default function HomeScreen({ navigation }: any) {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [selectedLat, setSelectedLat] = useState(18.52);
   const [selectedLng, setSelectedLng] = useState(73.85);
+  const [deliverToLabel, setDeliverToLabel] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -235,7 +236,9 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={s.hTitle}>Hungry? Let's get you fed.</Text>
             <TouchableOpacity style={s.locationBtn} onPress={() => setShowLocationModal(true)}>
               <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.9)" />
-              <Text style={s.locationBtnText}>Deliver to: lat {selectedLat.toFixed(2)}, lng {selectedLng.toFixed(2)}</Text>
+              <Text style={s.locationBtnText} numberOfLines={1}>
+                {deliverToLabel ? `Deliver to: ${deliverToLabel}` : 'Set delivery location'}
+              </Text>
               <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.9)" />
             </TouchableOpacity>
           </View>
@@ -313,11 +316,10 @@ export default function HomeScreen({ navigation }: any) {
         onClose={() => setShowLocationModal(false)}
         currentLat={selectedLat}
         currentLng={selectedLng}
-        onSelect={(lat, lng) => {
+        onSelect={(lat, lng, label) => {
           setSelectedLat(lat);
           setSelectedLng(lng);
-          // In a real app, you'd likely fetch restaurants nearby based on lat/lng here
-          // e.g., loadNearbyRestaurants(lat, lng);
+          setDeliverToLabel(label);
         }}
       />
     </Screen>
@@ -518,6 +520,7 @@ const s = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.95)',
     fontWeight: '500',
+    flexShrink: 1,
   },
   notifBtn: {
     width: 38,

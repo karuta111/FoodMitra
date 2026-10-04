@@ -77,6 +77,7 @@ router.post(
       req.auth!.userId,
       parsed.restaurantId,
       parsed.items,
+      parsed.deliveryAddressId,
     );
     return ok(res, cart);
   }),

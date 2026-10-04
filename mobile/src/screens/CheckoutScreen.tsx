@@ -45,6 +45,7 @@ export default function CheckoutScreen({ navigation }: any) {
     api.post<Cart>('/cart/sync', {
       restaurantId: cartRestaurant.id,
       items: cartItems.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity })),
+      deliveryAddressId: sel ?? undefined,
     })
       .then((cart) => setSyncedCart(cart))
       .catch(() => {/* keep showing last known totals */})
@@ -171,7 +172,9 @@ export default function CheckoutScreen({ navigation }: any) {
             <View style={s.paymentIcon}>
               <Ionicons name="card-outline" size={20} color={colors.primary} />
             </View>
-            <Text style={s.paymentText}>Razorpay (Online)</Text>
+            {/* <Text style={s.paymentText}>Razorpay (Online)</Text>
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} /> */}
+            <Text style={s.paymentText}>Cash On Delivery</Text>
             <Ionicons name="checkmark-circle" size={18} color={colors.success} />
           </View>
         </View>
