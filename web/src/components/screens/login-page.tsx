@@ -207,16 +207,6 @@ export function LoginPage() {
  </div>
  {/* Trust badges + footer */}
  <div className="relative space-y-4">
- <div className="space-y-1.5 text-sm">
- <div className="flex items-center gap-2">
- <UtensilsCrossed className="w-4 h-4 opacity-80" />
- <span>7+ restaurants</span>
- </div>
- <div className="flex items-center gap-2">
- <ShieldCheck className="w-4 h-4 opacity-80" />
- <span>Secure payments</span>
- </div>
- </div>
  <p className="text-xs text-white/60">© 2026 FoodMitra. All rights reserved.</p>
  </div>
  </div>

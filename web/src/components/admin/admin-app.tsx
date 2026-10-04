@@ -1814,14 +1814,11 @@ function AdminPromos() {
 function AdminBirthdays() {
  interface BirthdayItem { id: string; fullName: string; phone: string; dateOfBirth: string; age: number | null; userId: string; }
  interface AnniversaryItem { id: string; fullName: string; phone: string; anniversaryDate: string; yearsMarried: number | null; userId: string; }
- interface MilestoneItem { id: string; fullName: string; phone: string | null; dateOfBirth: string | null; anniversaryDate: string | null; user: { phone: string; isActive: boolean; createdAt: string }; }
 
  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
  const [birthdays, setBirthdays] = useState<BirthdayItem[]>([]);
  const [anniversaries, setAnniversaries] = useState<AnniversaryItem[]>([]);
  const [loading, setLoading] = useState(true);
- const [allCustomers, setAllCustomers] = useState<MilestoneItem[]>([]);
- const [allLoading, setAllLoading] = useState(true);
 
  const load = () => {
  setLoading(true);
@@ -1833,22 +1830,13 @@ function AdminBirthdays() {
  .finally(() => setLoading(false));
  };
 
- const loadAll = () => {
- setAllLoading(true);
- api.get<{ items: MilestoneItem[]; total: number }>('/api/v1/admin/customers/milestones?page=1&pageSize=100')
- .then((r) => setAllCustomers(r.items || []))
- .catch((e) => toastApiError(e, 'Failed to load customers'))
- .finally(() => setAllLoading(false));
- };
-
  useEffect(() => { load(); }, [date]);
- useEffect(() => { loadAll(); }, []);
 
  const todayStr = new Date().toISOString().slice(0, 10);
  const isToday = date === todayStr;
 
  return (
- <div className="space-y-6">
+ <div className="space-y-4">
  <PageHeader
  title={isToday ? "Today's Birthdays & Anniversaries" : 'Birthdays & Anniversaries'}
  subtitle="Pick any date to see customers celebrating on that day."
@@ -1866,16 +1854,18 @@ function AdminBirthdays() {
  </CardContent>
  </Card>
 
+ {/* Birthdays — compact: when empty, just a one-line message in the header (no CardContent body at all) */}
  <Card>
- <CardHeader>
+ <CardHeader className="pb-3">
  <CardTitle className="flex items-center gap-2 text-base"><Cake className="w-4 h-4 text-pink-500" /> Birthdays ({birthdays.length})</CardTitle>
- </CardHeader>
- <CardContent>
  {loading ? (
- <div className="text-sm text-slate-500">Loading…</div>
+ <p className="text-sm text-slate-500">Loading…</p>
  ) : birthdays.length === 0 ? (
- <EmptyState title="No birthdays on this date" />
- ) : (
+ <p className="text-sm text-slate-400">No birthdays on this date.</p>
+ ) : null}
+ </CardHeader>
+ {!loading && birthdays.length > 0 && (
+ <CardContent className="pt-0">
  <div className="border border-slate-200 rounded-lg overflow-x-auto">
  <Table>
  <TableHeader>
@@ -1898,20 +1888,22 @@ function AdminBirthdays() {
  </TableBody>
  </Table>
  </div>
- )}
  </CardContent>
+ )}
  </Card>
 
+ {/* Anniversaries — same compact pattern */}
  <Card>
- <CardHeader>
+ <CardHeader className="pb-3">
  <CardTitle className="flex items-center gap-2 text-base"><Heart className="w-4 h-4 text-red-500" /> Anniversaries ({anniversaries.length})</CardTitle>
- </CardHeader>
- <CardContent>
  {loading ? (
- <div className="text-sm text-slate-500">Loading…</div>
+ <p className="text-sm text-slate-500">Loading…</p>
  ) : anniversaries.length === 0 ? (
- <EmptyState title="No anniversaries on this date" />
- ) : (
+ <p className="text-sm text-slate-400">No anniversaries on this date.</p>
+ ) : null}
+ </CardHeader>
+ {!loading && anniversaries.length > 0 && (
+ <CardContent className="pt-0">
  <div className="border border-slate-200 rounded-lg overflow-x-auto">
  <Table>
  <TableHeader>
@@ -1934,46 +1926,8 @@ function AdminBirthdays() {
  </TableBody>
  </Table>
  </div>
- )}
  </CardContent>
- </Card>
-
- <Card>
- <CardHeader>
- <CardTitle className="text-base">All customers ({allCustomers.length})</CardTitle>
- </CardHeader>
- <CardContent>
- {allLoading ? (
- <div className="text-sm text-slate-500">Loading…</div>
- ) : allCustomers.length === 0 ? (
- <EmptyState title="No customers yet" />
- ) : (
- <div className="border border-slate-200 rounded-lg overflow-x-auto">
- <Table>
- <TableHeader>
- <TableRow>
- <TableHead>Name</TableHead>
- <TableHead>Phone</TableHead>
- <TableHead>Date of birth</TableHead>
- <TableHead>Anniversary</TableHead>
- <TableHead>Joined</TableHead>
- </TableRow>
- </TableHeader>
- <TableBody>
- {allCustomers.map((c) => (
- <TableRow key={c.id}>
- <TableCell className="font-medium">{c.fullName}</TableCell>
- <TableCell className="text-xs">{c.user.phone}</TableCell>
- <TableCell className="text-xs">{c.dateOfBirth ? new Date(c.dateOfBirth).toLocaleDateString('en-IN') : '—'}</TableCell>
- <TableCell className="text-xs">{c.anniversaryDate ? new Date(c.anniversaryDate).toLocaleDateString('en-IN') : '—'}</TableCell>
- <TableCell className="text-xs">{c.user.createdAt ? new Date(c.user.createdAt).toLocaleDateString('en-IN') : '—'}</TableCell>
- </TableRow>
- ))}
- </TableBody>
- </Table>
- </div>
  )}
- </CardContent>
  </Card>
  </div>
  );
