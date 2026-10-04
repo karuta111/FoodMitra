@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger';
 import type { AuthContext } from '@/lib/auth/session';
 import { PricingService, round2 } from './pricing.service';
 import { NotificationService } from './notification.service';
+import { sendOrderAlert } from '@/lib/integrations/telegram';
 
 export type OrderStatus =
   | 'PLACED'
@@ -191,6 +192,40 @@ export class OrderService {
       await NotificationService.notifyOrderPlaced(order.id);
 
       return { order, payment, created: true };
+    }).then(async (result) => {
+      // Fire-and-forget Telegram alert to the admin (outside the transaction so it doesn't block).
+      // Fetch the extra details needed for the message (restaurant name, customer info, items, address).
+      try {
+        const fullOrder = await db.order.findUnique({
+          where: { id: result.order.id },
+          include: {
+            restaurant: { select: { name: true } },
+            customer: { select: { phone: true, customerProfile: { select: { fullName: true } } } },
+            items: { select: { itemNameSnapshot: true, quantity: true, subtotal: true } },
+          },
+        });
+        if (fullOrder) {
+          await sendOrderAlert({
+            shortCode: fullOrder.shortCode,
+            totalAmount: fullOrder.totalAmount,
+            deliveryFee: fullOrder.deliveryFee,
+            subtotal: fullOrder.subtotal,
+            restaurantName: fullOrder.restaurant.name,
+            customerPhone: fullOrder.customer.phone,
+            customerName: fullOrder.customer.customerProfile?.fullName || null,
+            items: fullOrder.items.map((it) => ({
+              name: it.itemNameSnapshot,
+              quantity: it.quantity,
+              subtotal: it.subtotal,
+            })),
+            deliveryAddress: `${fullOrder.deliveryAddressLine1}, ${fullOrder.deliveryCity}`,
+            paymentStatus: fullOrder.paymentStatus,
+          });
+        }
+      } catch (err) {
+        logger.error('telegram.order_alert_failed', { orderId: result.order.id, error: String(err) });
+      }
+      return result;
     });
   }
 
