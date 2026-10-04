@@ -137,11 +137,12 @@ export function DashboardShell({
               </div>
             </div>
 
-            {/* Right: bell + user pill + logout */}
+            {/* Right: user pill + logout */}
             <div className="flex items-center gap-2 shrink-0">
-              <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 h-9 w-9 p-0">
+              {/* Bell notification button hidden from the UI (source code kept intact). */}
+              {/* <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 h-9 w-9 p-0">
                 <Bell className="w-4 h-4" />
-              </Button>
+              </Button> */}
 
               {/* User profile pill */}
               <div className="flex items-center gap-2 bg-slate-100 rounded-full pl-1 pr-3 py-1 border border-slate-200">

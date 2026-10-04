@@ -108,7 +108,8 @@ const NAV_ITEMS: NavItem[] = [
  { id: 'restaurants', label: 'Restaurants', icon: Store },
  { id: 'customers', label: 'Customers', icon: Users },
  { id: 'orders', label: 'Orders', icon: ShoppingCart },
- { id: 'payments', label: 'Payments', icon: CreditCard },
+ // Payments tab hidden from the UI (source code kept intact — AdminPayments component + route still exist).
+ // { id: 'payments', label: 'Payments', icon: CreditCard },
  { id: 'deliveryFees', label: 'Delivery Fees', icon: Truck },
  { id: 'birthdays', label: 'Birthdays', icon: Cake },
  { id: 'promos', label: 'Promos', icon: Image },
