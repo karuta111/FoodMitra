@@ -216,16 +216,37 @@ router.post('/customers/:id/unblock', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/v1/admin/orders
+// Query params: status, restaurantId, customerId, date (YYYY-MM-DD), page, pageSize
+// When date is provided, only orders created on that calendar day are returned.
 router.get('/orders', asyncHandler(async (req, res) => {
   const params = paginationSchema.parse(req.query);
   const result = await AdminService.listOrders({
     status: req.query.status as string | undefined,
     restaurantId: req.query.restaurantId as string | undefined,
     customerId: req.query.customerId as string | undefined,
+    date: req.query.date as string | undefined,
     page: params.page,
     pageSize: params.pageSize,
   });
   return ok(res, result);
+}));
+
+// GET /api/v1/admin/orders/:id — full order details for the admin "View" dialog.
+// Returns customer profile, restaurant details, item snapshots (name/price/qty),
+// the delivery address, pricing breakdown, payment record, and status timeline.
+router.get('/orders/:id', asyncHandler(async (req, res) => {
+  const order = await db.order.findUnique({
+    where: { id: req.params.id as string },
+    include: {
+      restaurant: { select: { id: true, name: true, phone: true, email: true, cuisine: true } },
+      customer: { select: { id: true, phone: true, email: true, customerProfile: { select: { fullName: true } } } },
+      items: true,
+      payment: true,
+      statusHistory: { orderBy: { createdAt: 'asc' } },
+    },
+  });
+  if (!order) throw AppError.notFound('Order');
+  return ok(res, order);
 }));
 
 // POST /api/v1/admin/orders/:id/assign-rider
@@ -250,6 +271,14 @@ router.post('/orders/:id/mark-paid', asyncHandler(async (req, res) => {
 // POST /api/v1/admin/orders/:id/delivered — admin marks as delivered (PAID → DELIVERED)
 router.post('/orders/:id/delivered', asyncHandler(async (req, res) => {
   const order = await OrderService.transitionOrder(req.params.id as string, 'DELIVERED', req.auth!, 'Marked delivered');
+  return ok(res, order);
+}));
+
+// POST /api/v1/admin/orders/:id/cancel — admin cancels an order (PLACED/APPROVED/PAID → CANCELLED)
+// Optional body: { reason?: string }
+router.post('/orders/:id/cancel', asyncHandler(async (req, res) => {
+  const reason = (req.body as { reason?: string } | null)?.reason || 'Cancelled by admin';
+  const order = await OrderService.cancelOrder(req.params.id as string, req.auth!, reason);
   return ok(res, order);
 }));
 

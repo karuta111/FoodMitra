@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
  LayoutDashboard, Store, Users, ShoppingCart, CreditCard, Bell, Tag,
- CheckCircle, XCircle, Pause, Play, Shield, Ban, RotateCcw, Eye, Truck, Cake, Heart, Image, BarChart3, Plus, UtensilsCrossed, MapPin, Pencil, Trash2, ArrowLeft,
+ CheckCircle, XCircle, Pause, Play, Shield, Ban, RotateCcw, Eye, Truck, Cake, Heart, Image, BarChart3, Plus, UtensilsCrossed, MapPin, Pencil, Trash2, ArrowLeft, RefreshCw, X,
 } from 'lucide-react';
 import { DashboardShell, PageHeader, StatCard, EmptyState, type NavItem } from '@/components/shared/dashboard-shell';
 import { LocationPickerModal } from '@/components/shared/location-picker-modal';
@@ -67,8 +67,31 @@ interface OrderListItem {
  totalAmount: number;
  createdAt: string;
  restaurant: { name: string };
- customer: { phone: string };
+ customer: { phone: string; email: string | null; customerProfile: { fullName: string } | null };
  items: { id: string }[];
+}
+
+/** Full order shape returned by GET /api/v1/admin/orders/:id — used by the View dialog. */
+interface FullOrderDetails {
+ id: string;
+ shortCode: string;
+ orderStatus: string;
+ paymentStatus: string;
+ subtotal: number;
+ deliveryFee: number;
+ tax: number;
+ discount: number;
+ totalAmount: number;
+ deliveryAddressLine1: string;
+ deliveryAddressLine2: string | null;
+ deliveryCity: string;
+ deliveryPhone: string;
+ createdAt: string;
+ restaurant: { id: string; name: string; phone: string; email: string | null; cuisine: string };
+ customer: { id: string; phone: string; email: string | null; customerProfile: { fullName: string } | null };
+ items: Array<{ id: string; itemNameSnapshot: string; itemPriceSnapshot: number; isVeg: boolean; quantity: number; subtotal: number }>;
+ payment: { id: string; status: string; method: string; amount: number } | null;
+ statusHistory: Array<{ id: string; fromStatus: string | null; toStatus: string; note: string | null; createdAt: string }>;
 }
 
 interface PaymentListItem {
@@ -901,41 +924,59 @@ function AdminMenuManagement({ restaurant, onClose }: { restaurant: RestaurantLi
 
 function AdminCustomers() {
  const [items, setItems] = useState<CustomerListItem[]>([]);
+ const [total, setTotal] = useState(0);
  const [loading, setLoading] = useState(true);
+ const [refreshing, setRefreshing] = useState(false);
  const [q, setQ] = useState('');
+ const [page, setPage] = useState(1);
+ const PAGE_SIZE = 20;
 
- const load = () => {
- setLoading(true);
- const params = new URLSearchParams({ page: '1', pageSize: '50' });
- if (q) params.set('q', q);
+ // When searching, fetch all matches (no pagination) so the admin can find any customer.
+ // When not searching, paginate at 20/page to avoid overloading the query.
+ const load = (silent = false) => {
+ if (silent) setRefreshing(true); else setLoading(true);
+ const searching = q.trim().length > 0;
+ const params = new URLSearchParams(
+ searching
+ ? { page: '1', pageSize: '500', q } // search mode: fetch all matches (500 is the backend max)
+ : { page: String(page), pageSize: String(PAGE_SIZE) }, // browse mode: 20/page
+ );
  api.get<{ items: CustomerListItem[]; total: number }>(`/api/v1/admin/customers?${params}`)
- .then((r) => setItems(r.items))
+ .then((r) => { setItems(r.items); setTotal(r.total); })
  .catch((e) => toastApiError(e, 'Failed to load customers'))
- .finally(() => setLoading(false));
+ .finally(() => { setLoading(false); setRefreshing(false); });
  };
 
- useEffect(() => { load(); }, [q]);
+ useEffect(() => { load(false); }, [q, page]);
 
  const toggle = async (id: string, isActive: boolean) => {
  try {
  await api.post(`/api/v1/admin/customers/${id}/${isActive ? 'block' : 'unblock'}`, {});
  toast.success(isActive ? 'Customer blocked' : 'Customer unblocked');
- load();
+ load(true); // silent reload — keeps the table visible
  } catch (e) {
  toastApiError(e, 'Action failed');
  }
  };
 
+ const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+ const searching = q.trim().length > 0;
+
  return (
  <div className="space-y-4">
- <PageHeader title="Customer Management" subtitle="View and manage customer accounts" />
- <Input placeholder="Search by email or name…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
+ <div className="flex items-center justify-between gap-3 flex-wrap">
+ <PageHeader title="Customer Management" subtitle={searching ? `${total} result${total === 1 ? '' : 's'} for "${q}"` : `${total} customer${total === 1 ? '' : 's'}`} />
+ <Button variant="outline" size="sm" onClick={() => load(true)} disabled={refreshing}>
+ <RefreshCw className={`w-3.5 h-3.5 mr-1 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+ </Button>
+ </div>
+ <Input placeholder="Search by email or name…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} className="max-w-xs" />
  {loading ? (
  <div className="text-sm text-slate-500">Loading…</div>
  ) : items.length === 0 ? (
- <EmptyState title="No customers found" />
+ <EmptyState title={searching ? `No customers match "${q}"` : 'No customers found'} />
  ) : (
- <div className="border border-slate-200 rounded-lg overflow-x-auto bg-white">
+ <div className={`border border-slate-200 rounded-lg overflow-x-auto bg-white transition-opacity ${refreshing ? 'opacity-60' : ''}`}>
  <Table>
  <TableHeader>
  <TableRow>
@@ -972,41 +1013,98 @@ function AdminCustomers() {
  </Table>
  </div>
  )}
+
+ {/* Pagination — only in browse mode (not when searching, since search fetches all matches) */}
+ {!searching && total > PAGE_SIZE && (
+ <div className="flex items-center justify-between">
+ <p className="text-xs text-slate-500">
+ Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total} customers
+ </p>
+ <div className="flex gap-1">
+ <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+ <span className="text-xs text-slate-500 flex items-center px-2">Page {page} / {totalPages}</span>
+ <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+ </div>
+ </div>
+ )}
+
+ {searching && total > 0 && (
+ <p className="text-xs text-slate-500 text-center">Showing all {total} matching customers</p>
+ )}
  </div>
  );
 }
 
 function AdminOrders() {
  const [items, setItems] = useState<OrderListItem[]>([]);
+ const [total, setTotal] = useState(0);
  const [loading, setLoading] = useState(true);
+ const [refreshing, setRefreshing] = useState(false);
  const [status, setStatus] = useState('');
+ const [page, setPage] = useState(1);
+ const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+ const [viewing, setViewing] = useState<OrderListItem | null>(null);
+ const PAGE_SIZE = 20;
 
- const load = () => {
- setLoading(true);
- const params = new URLSearchParams({ page: '1', pageSize: '50' });
+ // `silent` = re-fetch without showing the "Loading…" placeholder (keeps the current table visible).
+ // Used after actions (approve/pay/deliver/cancel) and the Refresh button so the table doesn't flash.
+ const load = (silent = false) => {
+ if (silent) setRefreshing(true); else setLoading(true);
+ const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
  if (status) params.set('status', status);
+ if (date) params.set('date', date);
  api.get<{ items: OrderListItem[]; total: number }>(`/api/v1/admin/orders?${params}`)
- .then((r) => setItems(r.items))
+ .then((r) => { setItems(r.items); setTotal(r.total); })
  .catch((e) => toastApiError(e, 'Failed to load orders'))
- .finally(() => setLoading(false));
+ .finally(() => { setLoading(false); setRefreshing(false); });
  };
 
- useEffect(() => { load(); }, [status]);
+ useEffect(() => { load(false); }, [status, page, date]);
 
  const advance = async (id: string, kind: 'approve' | 'mark-paid' | 'delivered') => {
  try {
  await api.post(`/api/v1/admin/orders/${id}/${kind}`, {});
  toast.success(`Order ${kind === 'mark-paid' ? 'marked as paid' : kind}`);
- load();
+ load(true); // silent reload — keeps the table visible
  } catch (e) {
  toastApiError(e, 'Action failed');
  }
  };
 
+ const cancel = async (id: string) => {
+ try {
+ await api.post(`/api/v1/admin/orders/${id}/cancel`, { reason: 'Cancelled by admin' });
+ toast.success('Order cancelled');
+ load(true); // silent reload — keeps the table visible
+ } catch (e) {
+ toastApiError(e, 'Cancel failed');
+ }
+ };
+
+ const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
  return (
  <div className="space-y-4">
- <PageHeader title="Order Management" subtitle="Monitor all platform orders" />
- <select className="border rounded px-2 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
+ <div className="flex items-center justify-between gap-3 flex-wrap">
+ <PageHeader title="Order Management" subtitle={`${total} order${total === 1 ? '' : 's'}${date ? ` on ${date}` : ''}`} />
+ <Button variant="outline" size="sm" onClick={() => load(true)} disabled={refreshing}>
+ <RefreshCw className={`w-3.5 h-3.5 mr-1 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+ </Button>
+ </div>
+
+ {/* Toolbar: date picker + status filter */}
+ <div className="flex gap-2 items-center flex-wrap">
+ <div className="flex items-center gap-1.5">
+ <Label htmlFor="order-date" className="text-xs text-slate-500">Date</Label>
+ <input
+ id="order-date"
+ type="date"
+ value={date}
+ onChange={(e) => { setDate(e.target.value); setPage(1); }}
+ className="border rounded px-2 py-1 text-sm"
+ />
+ </div>
+ <select className="border rounded px-2 text-sm" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
  <option value="">All statuses</option>
  <option value="PLACED">Placed</option>
  <option value="APPROVED">Approved</option>
@@ -1014,13 +1112,17 @@ function AdminOrders() {
  <option value="DELIVERED">Delivered</option>
  <option value="CANCELLED">Cancelled</option>
  </select>
+ {date && (
+ <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setDate(''); setPage(1); }}>Clear date</Button>
+ )}
+ </div>
 
  {loading ? (
  <div className="text-sm text-slate-500">Loading…</div>
  ) : items.length === 0 ? (
- <EmptyState title="No orders found" />
+ <EmptyState title="No orders found" message={date ? `No orders on ${date}.` : 'Try a different filter.'} />
  ) : (
- <div className="border border-slate-200 rounded-lg overflow-x-auto bg-white">
+ <div className={`border border-slate-200 rounded-lg overflow-x-auto bg-white transition-opacity ${refreshing ? 'opacity-60' : ''}`}>
  <Table>
  <TableHeader>
  <TableRow>
@@ -1038,20 +1140,33 @@ function AdminOrders() {
  <TableRow key={o.id}>
  <TableCell className="font-mono text-xs">{o.shortCode}</TableCell>
  <TableCell>{o.restaurant.name}</TableCell>
- <TableCell className="text-xs">{o.customer.phone}</TableCell>
+ <TableCell>
+ <p className="text-sm font-medium text-slate-800">{o.customer.customerProfile?.fullName || '—'}</p>
+ <p className="text-xs text-slate-500">{o.customer.phone}</p>
+ </TableCell>
  <TableCell><StatusBadge status={o.orderStatus} /></TableCell>
  <TableCell>₹{o.totalAmount.toLocaleString('en-IN')}</TableCell>
  <TableCell className="text-xs">{o.items.length} items</TableCell>
- <TableCell className="text-right space-x-1">
+ <TableCell className="text-right">
+ <div className="flex items-center justify-end gap-1 flex-wrap">
+ <Button size="sm" variant="outline" className="h-7" onClick={() => setViewing(o)}>
+ <Eye className="w-3 h-3 mr-1" /> View
+ </Button>
  {o.orderStatus === 'PLACED' && (
- <Button size="sm" variant="outline" onClick={() => advance(o.id, 'approve')}>Approve</Button>
+ <Button size="sm" variant="outline" className="h-7" onClick={() => advance(o.id, 'approve')}>Approve</Button>
  )}
  {o.orderStatus === 'APPROVED' && (
- <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => advance(o.id, 'mark-paid')}>Mark as paid</Button>
+ <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white h-7" onClick={() => advance(o.id, 'mark-paid')}>Mark as paid</Button>
  )}
  {o.orderStatus === 'PAID' && (
- <Button size="sm" variant="outline" onClick={() => advance(o.id, 'delivered')}>Mark as delivered</Button>
+ <Button size="sm" variant="outline" className="h-7" onClick={() => advance(o.id, 'delivered')}>Delivered</Button>
  )}
+ {['PLACED', 'APPROVED', 'PAID'].includes(o.orderStatus) && (
+ <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50 h-7" onClick={() => cancel(o.id)}>
+ <X className="w-3 h-3 mr-0.5" /> Cancel
+ </Button>
+ )}
+ </div>
  </TableCell>
  </TableRow>
  ))}
@@ -1059,7 +1174,197 @@ function AdminOrders() {
  </Table>
  </div>
  )}
+
+ {/* Pagination */}
+ {total > PAGE_SIZE && (
+ <div className="flex items-center justify-between">
+ <p className="text-xs text-slate-500">
+ Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total} orders
+ </p>
+ <div className="flex gap-1">
+ <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+ <span className="text-xs text-slate-500 flex items-center px-2">Page {page} / {totalPages}</span>
+ <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
  </div>
+ </div>
+ )}
+
+ {viewing && <OrderDetailsDialog order={viewing} onClose={() => setViewing(null)} />}
+ </div>
+ );
+}
+
+/**
+ * Full order details dialog — fetches the complete order via GET /api/v1/admin/orders/:id
+ * and shows: customer (name + phone), restaurant (name + phone + cuisine), the items
+ * table (snapshot name + veg + qty + unit price + subtotal), the delivery address,
+ * the pricing breakdown (subtotal / delivery fee / total / payment status), and the
+ * status timeline. Plus action buttons matching the order's current status.
+ */
+function OrderDetailsDialog({ order, onClose }: { order: OrderListItem; onClose: () => void }) {
+ const [details, setDetails] = useState<FullOrderDetails | null>(null);
+ const [loading, setLoading] = useState(true);
+
+ useEffect(() => {
+ setLoading(true);
+ api.get<FullOrderDetails>(`/api/v1/admin/orders/${order.id}`)
+ .then(setDetails)
+ .catch((e) => toastApiError(e, 'Failed to load order details'))
+ .finally(() => setLoading(false));
+ }, [order.id]);
+
+ const advance = async (kind: 'approve' | 'mark-paid' | 'delivered') => {
+ try {
+ await api.post(`/api/v1/admin/orders/${order.id}/${kind}`, {});
+ toast.success(`Order ${kind === 'mark-paid' ? 'marked as paid' : kind}`);
+ onClose();
+ } catch (e) {
+ toastApiError(e, 'Action failed');
+ }
+ };
+
+ const cancel = async () => {
+ try {
+ await api.post(`/api/v1/admin/orders/${order.id}/cancel`, { reason: 'Cancelled by admin' });
+ toast.success('Order cancelled');
+ onClose();
+ } catch (e) {
+ toastApiError(e, 'Cancel failed');
+ }
+ };
+
+ return (
+ <Dialog open={true} onOpenChange={(o) => { if (!o) onClose(); }}>
+ <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+ <DialogHeader>
+ <DialogTitle className="flex items-center gap-2">
+ Order details — <code className="font-mono text-sm">{order.shortCode}</code>
+ <StatusBadge status={order.orderStatus} />
+ </DialogTitle>
+ </DialogHeader>
+
+ {loading ? (
+ <div className="py-8 text-center text-sm text-slate-500">Loading order details…</div>
+ ) : !details ? (
+ <div className="py-8 text-center text-sm text-slate-500">Could not load order details.</div>
+ ) : (
+ <div className="space-y-4">
+ {/* Two-column meta: customer + restaurant */}
+ <div className="grid grid-cols-2 gap-3">
+ {/* Customer card */}
+ <div className="bg-slate-50 rounded-lg p-3 space-y-1">
+ <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Customer</p>
+ <p className="text-sm font-medium text-slate-800">{details.customer.customerProfile?.fullName || '—'}</p>
+ <p className="text-xs text-slate-600">{details.customer.phone}</p>
+ {details.customer.email && <p className="text-xs text-slate-500">{details.customer.email}</p>}
+ </div>
+ {/* Restaurant card */}
+ <div className="bg-slate-50 rounded-lg p-3 space-y-1">
+ <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Restaurant</p>
+ <p className="text-sm font-medium text-slate-800">{details.restaurant.name}</p>
+ <p className="text-xs text-slate-600">{details.restaurant.phone || '—'}</p>
+ <p className="text-xs text-slate-500">{details.restaurant.cuisine}</p>
+ </div>
+ </div>
+
+ {/* Delivery address */}
+ <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-1">
+ <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-1"><MapPin className="w-3 h-3" /> Delivery address</p>
+ <p className="text-sm text-slate-800">{details.deliveryAddressLine1}</p>
+ {details.deliveryAddressLine2 && <p className="text-xs text-slate-600">{details.deliveryAddressLine2}</p>}
+ <p className="text-xs text-slate-600">{details.deliveryCity}</p>
+ <p className="text-xs text-slate-500">Recipient phone: {details.deliveryPhone}</p>
+ </div>
+
+ {/* Items table */}
+ <div>
+ <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Items ({details.items.length})</p>
+ <div className="border border-slate-200 rounded-lg overflow-hidden">
+ <Table>
+ <TableHeader>
+ <TableRow>
+ <TableHead className="text-xs">Item</TableHead>
+ <TableHead className="text-xs">Veg</TableHead>
+ <TableHead className="text-xs text-right">Qty</TableHead>
+ <TableHead className="text-xs text-right">Unit</TableHead>
+ <TableHead className="text-xs text-right">Subtotal</TableHead>
+ </TableRow>
+ </TableHeader>
+ <TableBody>
+ {details.items.map((it) => (
+ <TableRow key={it.id}>
+ <TableCell className="text-sm font-medium text-slate-800">{it.itemNameSnapshot}</TableCell>
+ <TableCell>
+ <span className={`inline-block w-3 h-3 border-2 rounded-sm ${it.isVeg ? 'border-green-500' : 'border-red-500'}`}>
+ <span className={`block w-1.5 h-1.5 rounded-full m-auto mt-0.5 ${it.isVeg ? 'bg-green-500' : 'bg-red-500'}`} />
+ </span>
+ </TableCell>
+ <TableCell className="text-xs text-right">{it.quantity}</TableCell>
+ <TableCell className="text-xs text-right">₹{it.itemPriceSnapshot}</TableCell>
+ <TableCell className="text-xs text-right font-medium">₹{it.subtotal}</TableCell>
+ </TableRow>
+ ))}
+ </TableBody>
+ </Table>
+ </div>
+ </div>
+
+ {/* Pricing breakdown */}
+ <div className="bg-slate-50 rounded-lg p-3 space-y-1.5">
+ <div className="flex justify-between text-xs"><span className="text-slate-600">Subtotal</span><span className="font-medium">₹{details.subtotal}</span></div>
+ <div className="flex justify-between text-xs"><span className="text-slate-600">Delivery fee</span><span className="font-medium">₹{details.deliveryFee}</span></div>
+ <div className="flex justify-between text-xs"><span className="text-slate-600">Tax</span><span className="font-medium">₹{details.tax}</span></div>
+ {details.discount > 0 && (
+ <div className="flex justify-between text-xs"><span className="text-slate-600">Discount</span><span className="font-medium text-green-600">−₹{details.discount}</span></div>
+ )}
+ <div className="border-t border-slate-200 pt-1.5 flex justify-between text-sm font-semibold"><span>Total</span><span>₹{details.totalAmount}</span></div>
+ {details.payment && (
+ <div className="flex justify-between text-xs pt-1">
+ <span className="text-slate-500">Payment: {details.payment.status}</span>
+ <span className="text-slate-500">{details.payment.method}</span>
+ </div>
+ )}
+ </div>
+
+ {/* Status timeline */}
+ {details.statusHistory.length > 0 && (
+ <div>
+ <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Timeline</p>
+ <div className="space-y-1.5">
+ {details.statusHistory.map((h, i) => (
+ <div key={h.id} className="flex items-start gap-2 text-xs">
+ <span className="w-2 h-2 rounded-full bg-orange-400 mt-1 shrink-0" />
+ <div>
+ <p className="text-slate-700 font-medium">{h.toStatus}{h.fromStatus ? ` (from ${h.fromStatus})` : ''}</p>
+ <p className="text-slate-400">{new Date(h.createdAt).toLocaleString('en-IN')}{h.note ? ` • ${h.note}` : ''}</p>
+ </div>
+ </div>
+ ))}
+ </div>
+ </div>
+ )}
+
+ {/* Action buttons */}
+ {order.orderStatus !== 'DELIVERED' && order.orderStatus !== 'CANCELLED' && (
+ <div className="flex gap-2 pt-2 border-t">
+ {order.orderStatus === 'PLACED' && (
+ <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => advance('approve')}>Approve</Button>
+ )}
+ {order.orderStatus === 'APPROVED' && (
+ <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => advance('mark-paid')}>Mark as paid</Button>
+ )}
+ {order.orderStatus === 'PAID' && (
+ <Button variant="outline" onClick={() => advance('delivered')}>Mark as delivered</Button>
+ )}
+ <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50 ml-auto" onClick={cancel}>
+ <X className="w-4 h-4 mr-1" /> Cancel order
+ </Button>
+ </div>
+ )}
+ </div>
+ )}
+ </DialogContent>
+ </Dialog>
  );
 }
 

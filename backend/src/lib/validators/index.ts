@@ -2,9 +2,11 @@
 import { z } from 'zod';
 
 // Pagination
+// pageSize max is 500 to allow admin search to fetch all matches in one request,
+// while still capping the query size to avoid unbounded DB reads.
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(50).default(20),
+  pageSize: z.coerce.number().int().min(1).max(500).default(20),
 });
 
 // Generic UUID-ish ID

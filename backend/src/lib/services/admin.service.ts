@@ -81,8 +81,9 @@ export class AdminService {
       role: 'CUSTOMER' as const,
       ...(params.q ? {
         OR: [
-          { email: { contains: params.q } },
-          { customerProfile: { fullName: { contains: params.q } } },
+          { email: { contains: params.q, mode: 'insensitive' as const } },
+          { customerProfile: { fullName: { contains: params.q, mode: 'insensitive' as const } } },
+          { phone: { contains: params.q, mode: 'insensitive' as const } },
         ],
       } : {}),
     };
@@ -99,11 +100,21 @@ export class AdminService {
     return { items, total, page: params.page, pageSize: params.pageSize };
   }
 
-  static async listOrders(params: { status?: string; restaurantId?: string; customerId?: string; page: number; pageSize: number }) {
+  static async listOrders(params: { status?: string; restaurantId?: string; customerId?: string; date?: string; page: number; pageSize: number }) {
+    // Date filter: when `date` (YYYY-MM-DD) is provided, only orders created on that calendar day are returned.
+    // Empty string = all dates.
+    let dateFilter: { gte?: Date; lt?: Date } | undefined;
+    if (params.date) {
+      const [y, m, d] = params.date.split('-').map(Number);
+      const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+      const end = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+      dateFilter = { gte: start, lt: new Date(end.getTime() + 1) };
+    }
     const where = {
       ...(params.status ? { orderStatus: params.status as never } : {}),
       ...(params.restaurantId ? { restaurantId: params.restaurantId } : {}),
       ...(params.customerId ? { customerId: params.customerId } : {}),
+      ...(dateFilter ? { createdAt: dateFilter } : {}),
     };
     const [total, items] = await Promise.all([
       db.order.count({ where }),
@@ -114,7 +125,7 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
         include: {
           restaurant: { select: { name: true } },
-          customer: { select: { phone: true, email: true } },
+          customer: { select: { phone: true, email: true, customerProfile: { select: { fullName: true } } } },
           items: true,
         },
       }),
