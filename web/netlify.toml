@@ -5,10 +5,14 @@
 # doesn't know how to serve a Next.js App Router app (it's not a static site —
 # it needs serverless functions for SSR + rewrites). Without the plugin, every
 # route returns 404 because there's no index.html at the publish root.
+#
+# IMPORTANT: publish must NOT equal base. The Netlify base is /opt/build/repo/web,
+# so publish = "." would resolve to the same path → the plugin rejects it.
+# publish = ".next" points to the Next.js build output (a subdirectory of base).
 
 [build]
   command = "bun run build"
-  publish = "."
+  publish = ".next"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
