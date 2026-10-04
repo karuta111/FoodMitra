@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
   StyleSheet,
   StatusBar,
 } from 'react-native';
@@ -15,35 +16,81 @@ import { colors, radius, shadow } from '../theme/colors';
 import { Screen, EmptyState } from '../components/ui';
 import type { Order } from '../types';
 
+const PAGE_SIZE = 10;
+
 export default function OrderHistoryScreen({ navigation }: any) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const isLoadingMoreRef = useRef(false);
   const insets = useSafeAreaInsets();
 
-  const load = useCallback(async () => {
+  const fetchPage = useCallback(async (pageNum: number, replace: boolean) => {
     try {
-      const res = await api.get<{ items: Order[]; total: number }>('/orders?page=1&pageSize=20');
-      setOrders(res.items);
+      const res = await api.get<{ items: Order[]; total: number; page: number; pageSize: number }>(
+        `/orders?page=${pageNum}&pageSize=${PAGE_SIZE}`,
+      );
+      setTotal(res.total);
+      setOrders((prev) => (replace ? res.items : [...prev, ...res.items]));
+      setPage(pageNum);
     } catch {}
-    finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Initial load
+  useEffect(() => {
+    fetchPage(1, true).finally(() => setLoading(false));
+  }, [fetchPage]);
+
+  // Pull-to-refresh
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchPage(1, true);
+    setRefreshing(false);
+  }, [fetchPage]);
+
+  // Load next page
+  const onEndReached = useCallback(async () => {
+    if (isLoadingMoreRef.current) return;
+    if (orders.length >= total) return;
+    isLoadingMoreRef.current = true;
+    setLoadingMore(true);
+    await fetchPage(page + 1, false);
+    setLoadingMore(false);
+    isLoadingMoreRef.current = false;
+  }, [fetchPage, orders.length, total, page]);
 
   const getStatusColor = (status: string) => {
     const s = status.toLowerCase();
-    if (s.includes('deliver') || s.includes('complet')) return colors.success;
-    if (s.includes('cancel')) return colors.danger;
+    if (s === 'delivered') return colors.success;
+    if (s === 'cancelled') return colors.danger;
+    if (s === 'paid') return '#2196F3';
     return colors.warning;
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'PLACED':     return 'Placed';
+      case 'APPROVED':   return 'Approved';
+      case 'PAID':       return 'Paid';
+      case 'DELIVERED':  return 'Delivered';
+      case 'CANCELLED':  return 'Cancelled';
+      default:           return status;
+    }
   };
 
   return (
     <Screen>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+
       {/* Header */}
       <View style={[s.header, { paddingTop: Math.max(insets.top + 10, 24) }]}>
         <Text style={s.title}>Your Orders</Text>
-        <Text style={s.subtitle}>{orders.length} order{orders.length !== 1 ? 's' : ''}</Text>
+        <Text style={s.subtitle}>
+          {total > 0 ? `${total} order${total !== 1 ? 's' : ''}` : 'No orders yet'}
+        </Text>
       </View>
 
       <FlatList
@@ -53,17 +100,31 @@ export default function OrderHistoryScreen({ navigation }: any) {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); load(); }}
+            onRefresh={onRefresh}
             colors={[colors.primary]}
             tintColor={colors.primary}
           />
         }
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.3}
         ListEmptyComponent={
           loading ? (
-            <Text style={s.load}>Loading...</Text>
+            <View style={s.centerWrap}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
           ) : (
             <EmptyState title="No orders yet" message="Place your first order!" />
           )
+        }
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={s.footerLoader}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={s.footerText}>Loading more…</Text>
+            </View>
+          ) : orders.length > 0 && orders.length >= total ? (
+            <Text style={s.endText}>You've seen all orders</Text>
+          ) : null
         }
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -83,7 +144,7 @@ export default function OrderHistoryScreen({ navigation }: any) {
               </View>
               <View style={[s.statusBadge, { backgroundColor: getStatusColor(item.orderStatus) + '18' }]}>
                 <Text style={[s.statusText, { color: getStatusColor(item.orderStatus) }]}>
-                  {item.orderStatus.replace(/_/g, ' ').toLowerCase()}
+                  {getStatusLabel(item.orderStatus)}
                 </Text>
               </View>
             </View>
@@ -91,7 +152,11 @@ export default function OrderHistoryScreen({ navigation }: any) {
             <View style={s.cardBottom}>
               <View style={s.metaItem}>
                 <Ionicons name="calendar-outline" size={12} color={colors.textMuted} />
-                <Text style={s.metaText}>{new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                <Text style={s.metaText}>
+                  {new Date(item.createdAt).toLocaleDateString('en-IN', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                  })}
+                </Text>
               </View>
               <View style={s.metaItem}>
                 <Ionicons name="cash-outline" size={12} color={colors.textMuted} />
@@ -130,11 +195,26 @@ const s = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 100,
   },
-  load: {
-    textAlign: 'center',
+  centerWrap: {
+    paddingTop: 60,
+    alignItems: 'center',
+  },
+  footerLoader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  footerText: {
+    fontSize: 13,
     color: colors.textSecondary,
-    marginTop: 40,
-    fontSize: 14,
+  },
+  endText: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: colors.textMuted,
+    paddingVertical: 16,
   },
   card: {
     backgroundColor: colors.white,
