@@ -1,4 +1,24 @@
+# Netlify config for the FoodMitra Next.js web app.
+# Lives in web/ because the Netlify build base is /opt/build/repo/web.
+#
+# The critical piece is [[plugins]] → @netlify/plugin-nextjs. Without it, Netlify
+# doesn't know how to serve a Next.js App Router app (it's not a static site —
+# it needs serverless functions for SSR + rewrites). Without the plugin, every
+# route returns 404 because there's no index.html at the publish root.
+#
+# IMPORTANT: publish must NOT equal base. The Netlify base is /opt/build/repo/web,
+# so publish = "." would resolve to the same path → the plugin rejects it.
+# publish = ".next" points to the Next.js build output (a subdirectory of base).
+
 [build]
-  # These are intentionally public (NEXT_PUBLIC_ prefix → inlined into client bundle by design)
-  # Listed here so Netlify's secrets scanner doesn't flag them.
-  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_API_BASE_URL"
+  command = "bun run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  # These are intentionally public (NEXT_PUBLIC_ prefix → inlined into the client
+  # bundle by Next.js at build time — that's the whole point of the prefix).
+  # Listed here so Netlify's secrets scanner doesn't flag them as leaked.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_ADMIN_PHONE,NEXT_PUBLIC_ADMIN_PASSWORD,NEXT_PUBLIC_MSG91_AUTH_KEY,NEXT_PUBLIC_MSG91_WIDGET_ID,NEXT_PUBLIC_MSG91_WIDGET_NAME,NEXT_PUBLIC_API_BASE_URL"
