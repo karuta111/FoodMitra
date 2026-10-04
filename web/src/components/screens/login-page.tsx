@@ -224,7 +224,10 @@ export function LoginPage() {
  {/* ───────────────────── RIGHT: Form panel (white) ───────────────────── */}
  <div className="flex-1 flex items-center justify-center p-6 lg:p-10">
  <div className="w-full max-w-md">
- {/* Segmented tabs (Log in / Sign up) — only shown on the two top-level screens */}
+ {/* Segmented tabs (Log in / Sign up) — entire container hidden from the UI per request.
+ Both the Log in + Sign up tab buttons + the grey pill container are commented out.
+ The underlying screen-state logic (isLoginTab / isSignupTab / setScreen) is kept intact. */}
+ {/*
  <div className="flex bg-slate-100 rounded-full p-1 mb-6">
  <button
  type="button"
@@ -247,6 +250,7 @@ export function LoginPage() {
  Sign up
  </button>
  </div>
+ */}
 
  {/* Back link for sub-screens */}
  {screen !== 'login' && screen !== 'register_details' && (
@@ -290,17 +294,18 @@ export function LoginPage() {
  <form onSubmit={handleLogin} className="space-y-4">
  <div className="space-y-1.5">
  <Label htmlFor="phone">Phone number</Label>
- <div className="relative">
- <Smartphone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+ {/* PhoneInput renders its own +91 prefix internally at left-3; do NOT wrap it in another relative div with a Smartphone icon — that causes the +91 to overlap the icon. */}
  <PhoneInput id="phone" required value={phone} onChange={setPhone} />
- </div>
  </div>
  <div className="space-y-1.5">
  <div className="flex items-center justify-between">
  <Label htmlFor="password">Password</Label>
+ {/* 'Forgot?' link hidden from the UI per request — the forgot-password flow (screen === 'forgot_phone') is kept intact in the source code and still works if reached programmatically. */}
+ {/*
  <button type="button" onClick={() => setScreen('forgot_phone')} className="text-xs text-orange-600 hover:underline">
  Forgot?
  </button>
+ */}
  </div>
  <div className="relative">
  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
