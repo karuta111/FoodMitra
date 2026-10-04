@@ -269,15 +269,15 @@ export default function RestaurantScreen({ route, navigation }: any) {
           <View style={s.infoLeft}>
             <Text style={s.restName} numberOfLines={1}>{displayName}</Text>
             {cuisine ? <Text style={s.cuisineText}>{cuisine}</Text> : null}
-            <View style={s.metaRow}>
+            {/* <View style={s.metaRow}>
               <Ionicons name="time-outline" size={13} color={colors.textMuted} />
               <Text style={s.metaText}>20–35 mins</Text>
               <View style={s.metaDot} />
               <Ionicons name="bicycle-outline" size={14} color={colors.textMuted} />
               <Text style={s.metaText}>Free delivery</Text>
-            </View>
+            </View> */}
           </View>
-          {rating > 0 && (
+          {/* {rating > 0 && (
             <View style={s.ratingBadge}>
               <Ionicons name="star" size={12} color="#fff" />
               <Text style={s.ratingText}>{rating.toFixed(1)}</Text>
@@ -287,12 +287,12 @@ export default function RestaurantScreen({ route, navigation }: any) {
                 </Text>
               )}
             </View>
-          )}
+          )} */}
         </View>
       )}
 
       {/* ── Section divider ── */}
-      <View style={s.stripDivider} />
+      {/* <View style={s.stripDivider} /> */}
 
       {/* ── Menu list ── */}
       {loading ? (

@@ -15,6 +15,7 @@ export default function ProfileScreen({ navigation }: any) {
     { icon: 'location-outline', label: 'Saved Addresses', onPress: () => navigation.navigate('Addresses') },
     { icon: 'clipboard-outline', label: 'Order History', onPress: () => navigation.navigate('OrdersTab') },
     { icon: 'notifications-outline', label: 'Notifications', onPress: () => navigation.navigate('Notifications') },
+    { icon: 'headset-outline', label: 'Contact & Support', onPress: () => navigation.navigate('ContactSupport') },
   ];
 
   return (

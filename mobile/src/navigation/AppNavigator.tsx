@@ -20,6 +20,7 @@ import AddAddressScreen from '../screens/AddAddressScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import OffersScreen from '../screens/OffersScreen';
+import ContactSupportScreen from '../screens/ContactSupportScreen';
 
 // ─── Tab Navigator ─────────────────────────────────────────────────────────────
 const Tab = createBottomTabNavigator();
@@ -164,6 +165,7 @@ export default function AppNavigator() {
             <Stack.Screen name="Addresses" component={AddressesScreen} />
             <Stack.Screen name="AddAddress" component={AddAddressScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="ContactSupport" component={ContactSupportScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

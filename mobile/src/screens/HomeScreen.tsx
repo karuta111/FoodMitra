@@ -165,13 +165,13 @@ function RestaurantCard({ item, onPress }: { item: Restaurant; onPress: () => vo
         <Text style={cs.cuisine} numberOfLines={1}>{item.cuisine}</Text>
 
         {/* Meta row: time · delivery */}
-        <View style={cs.metaRow}>
+        {/* <View style={cs.metaRow}>
           <Ionicons name="time-outline" size={12} color={colors.textMuted} />
           <Text style={cs.metaText}>20–35 min</Text>
           <View style={cs.metaDot} />
           <Ionicons name="bicycle-outline" size={12} color={colors.textMuted} />
           <Text style={cs.metaText}>Free delivery</Text>
-        </View>
+        </View> */}
       </View>
     </TouchableOpacity>
   );
