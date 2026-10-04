@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4000";
+// Strip any trailing slash so the rewrite destinations below don't produce double-slash URLs
+// (e.g. "https://host//api/v1/..." — which Render/Nginx reject with an HTML error page).
+// Set BACKEND_URL without a trailing slash in production: https://your-backend.onrender.com
+const BACKEND_URL = (process.env.BACKEND_URL || "http://localhost:4000").replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
   output: "standalone",
