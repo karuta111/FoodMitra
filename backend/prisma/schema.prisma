@@ -142,6 +142,9 @@ model CustomerProfile {
   // Customer milestones — used by admin "Today's Birthdays" + "Today's Anniversaries" view
   dateOfBirth      DateTime?
   anniversaryDate  DateTime?
+  // Expo push notification token — set by the mobile app on launch (unique per device).
+  // Used to send order status updates (approved / paid / delivered / cancelled).
+  expoPushToken    String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

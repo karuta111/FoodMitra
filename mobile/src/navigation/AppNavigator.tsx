@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator, TransitionPresets } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useAuthStore } from '../store/auth';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import { colors, shadow } from '../theme/colors';
 
 import LoginScreen from '../screens/LoginScreen';
@@ -130,7 +131,11 @@ const Stack = createStackNavigator();
 
 export default function AppNavigator() {
   const { user, loading, initAuth } = useAuthStore();
+  const navigationRef = useNavigationContainerRef();
   useEffect(() => { initAuth(); }, []);
+
+  // Register for Expo push notifications (only when logged in) + handle tap-to-navigate
+  usePushNotifications(navigationRef);
 
   if (loading) {
     return (
@@ -142,7 +147,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,

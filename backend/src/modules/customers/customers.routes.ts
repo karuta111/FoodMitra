@@ -102,4 +102,21 @@ router.delete(
   }),
 );
 
+// POST /api/v1/customers/push-token
+// Mobile app registers its Expo push token so the backend can send order status notifications.
+router.post(
+  '/push-token',
+  requireRoles('CUSTOMER'),
+  asyncHandler(async (req, res) => {
+    const { token } = z.object({ token: z.string().min(10) }).parse(req.body);
+    const profile = await db.customerProfile.findUnique({ where: { userId: req.auth!.userId } });
+    if (!profile) throw AppError.notFound('Customer profile');
+    await db.customerProfile.update({
+      where: { userId: req.auth!.userId },
+      data: { expoPushToken: token },
+    });
+    return ok(res, { registered: true });
+  }),
+);
+
 export { router as customerRoutes };

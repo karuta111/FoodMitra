@@ -9,6 +9,7 @@ import type { AuthContext } from '@/lib/auth/session';
 import { PricingService, round2 } from './pricing.service';
 import { NotificationService } from './notification.service';
 import { sendOrderAlert } from '@/lib/integrations/telegram';
+import { sendOrderStatusPush } from '@/lib/integrations/expo-push';
 
 export type OrderStatus =
   | 'PLACED'
@@ -278,6 +279,24 @@ export class OrderService {
       await NotificationService.notifyOrderTransition(order.id, from, toStatus, ctx).catch((e) =>
         logger.error('notification.failed', { orderId: order.id, error: e }),
       );
+      // Send Expo push notification to the customer's device
+      try {
+        const customer = await db.user.findUnique({
+          where: { id: order.customerId },
+          include: { customerProfile: { select: { expoPushToken: true } } },
+        });
+        const restaurant = await db.restaurant.findUnique({ where: { id: order.restaurantId }, select: { name: true } });
+        if (customer?.customerProfile?.expoPushToken && restaurant) {
+          await sendOrderStatusPush(
+            customer.customerProfile.expoPushToken,
+            order.shortCode,
+            restaurant.name,
+            toStatus,
+          );
+        }
+      } catch (e) {
+        logger.error('push_notification.failed', { orderId: order.id, error: e });
+      }
       return updated;
     });
   }
@@ -368,6 +387,24 @@ export class OrderService {
       await NotificationService.notifyOrderTransition(order.id, from, 'PAID', ctx).catch((e) =>
         logger.error('notification.failed', { orderId: order.id, error: e }),
       );
+      // Send Expo push notification to the customer's device
+      try {
+        const customer = await db.user.findUnique({
+          where: { id: order.customerId },
+          include: { customerProfile: { select: { expoPushToken: true } } },
+        });
+        const restaurant = await db.restaurant.findUnique({ where: { id: order.restaurantId }, select: { name: true } });
+        if (customer?.customerProfile?.expoPushToken && restaurant) {
+          await sendOrderStatusPush(
+            customer.customerProfile.expoPushToken,
+            order.shortCode,
+            restaurant.name,
+            'PAID',
+          );
+        }
+      } catch (e) {
+        logger.error('push_notification.failed', { orderId: order.id, error: e });
+      }
       return updated;
     });
   }
