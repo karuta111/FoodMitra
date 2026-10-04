@@ -127,7 +127,7 @@ export class OrderService {
     }
 
     return db.$transaction(async (tx) => {
-      // Create order
+      // Create order + order items in a single query (nested create)
       const order = await tx.order.create({
         data: {
           shortCode,
@@ -158,43 +158,40 @@ export class OrderService {
               subtotal: it.subtotal,
             })),
           },
+          // Nested create for status history — eliminates a separate query
+          statusHistory: {
+            create: {
+              fromStatus: null,
+              toStatus: 'PLACED',
+              changedByUserId: input.customerId,
+              note: 'Order placed',
+            },
+          },
+          // Nested create for payment — eliminates a separate query
+          payment: {
+            create: {
+              amount: pricing.totalAmount,
+              currency: 'INR',
+              method: 'MANUAL',
+              status: 'PENDING',
+            },
+          },
         },
-        include: { items: true },
+        include: { items: true, payment: true },
       });
 
-      // Status history
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: order.id,
-          fromStatus: null,
-          toStatus: 'PLACED',
-          changedByUserId: input.customerId,
-          note: 'Order placed',
-        },
-      });
-
-      // Payment record
-      const payment = await tx.payment.create({
-        data: {
-          orderId: order.id,
-          amount: pricing.totalAmount,
-          currency: 'INR',
-          method: 'MANUAL',
-          status: 'PENDING',
-        },
-      });
-
-      // Clear cart
+      // Clear cart (2 queries — must run after order is created)
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
       await tx.cart.delete({ where: { id: cart.id } });
 
-      // Send notification to customer (order placed) + admins
-      await NotificationService.notifyOrderPlaced(order.id);
-
-      return { order, payment, created: true };
-    }).then(async (result) => {
-      // Fire-and-forget Telegram alert to the admin (outside the transaction so it doesn't block).
-      // Fetch the extra details needed for the message (restaurant name, customer info, items, address).
+      return { order, payment: order.payment, created: true };
+    }, { timeout: 15000 }).then(async (result) => {
+      // Side effects — run AFTER the transaction commits (outside the DB transaction so they don't add latency)
+      // 1. In-app notifications (customer + admin)
+      await NotificationService.notifyOrderPlaced(result.order.id).catch((e) =>
+        logger.error('notification.failed', { orderId: result.order.id, error: e }),
+      );
+      // 2. Telegram alert to admin
       try {
         const fullOrder = await db.order.findUnique({
           where: { id: result.order.id },
@@ -273,7 +270,7 @@ export class OrderService {
         },
       });
       return updated;
-    }).then(async (updated) => {
+    }, { timeout: 15000 }).then(async (updated) => {
       // Side effects (outside TX)
       await NotificationService.notifyOrderTransition(order.id, from, toStatus, ctx).catch((e) =>
         logger.error('notification.failed', { orderId: order.id, error: e }),
@@ -364,7 +361,7 @@ export class OrderService {
         },
       });
       return updatedOrder;
-    }).then(async (updated) => {
+    }, { timeout: 15000 }).then(async (updated) => {
       await NotificationService.notifyOrderTransition(order.id, from, 'PAID', ctx).catch((e) =>
         logger.error('notification.failed', { orderId: order.id, error: e }),
       );
