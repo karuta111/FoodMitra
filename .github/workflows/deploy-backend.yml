@@ -29,7 +29,8 @@ jobs:
           REMOTE_USER: ${{ secrets.EC2_USER }}
           SOURCE: "backend/"
           TARGET: "/home/ec2-user/foodmitra-backend/"
-          ARGS: "-rlgoDzvc --delete --exclude node_modules --exclude .env"
+          ARGS: "-rlgoDzvc --delete"
+          EXCLUDE: "node_modules, .env"
 
       # ─── Step 2: Bootstrap + install + restart on EC2 ───────────────────────
       - name: Install deps, generate Prisma, restart PM2
