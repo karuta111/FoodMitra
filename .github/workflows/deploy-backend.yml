@@ -1,0 +1,95 @@
+name: Deploy Backend to EC2
+
+# Triggers on every push to main that touches backend code or this workflow file.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+
+  # Allow manual trigger from the GitHub Actions tab.
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ─── Step 1: Sync backend/ to EC2 via rsync ────────────────────────────
+      - name: Deploy backend files to EC2
+        uses: easingthemes/ssh-deploy@main
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.EC2_HOST }}
+          REMOTE_USER: ${{ secrets.EC2_USER }}
+          SOURCE: "backend/"
+          TARGET: "/home/ec2-user/foodmitra-backend/"
+          ARGS: "-rlgoDzvc --delete --exclude node_modules --exclude .env"
+
+      # ─── Step 2: Bootstrap + install + restart on EC2 ───────────────────────
+      - name: Install deps, generate Prisma, restart PM2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            APP_DIR="/home/ec2-user/foodmitra-backend"
+            cd "$APP_DIR"
+
+            # ── Bootstrap: install Bun + PM2 if not already installed ──────────
+            if ! command -v bun &>/dev/null; then
+              echo "Installing Bun..."
+              curl -fsSL https://bun.sh/install | bash
+            fi
+
+            # Source bun into PATH (needed on every run since SSH starts fresh)
+            export BUN_INSTALL="$HOME/.bun"
+            export PATH="$BUN_INSTALL/bin:$PATH"
+
+            echo "Bun version: $(bun --version)"
+
+            # Install PM2 globally if not present (needs Node.js)
+            if ! command -v pm2 &>/dev/null; then
+              echo "Installing Node.js..."
+              curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+              sudo yum install -y nodejs
+              echo "Installing PM2..."
+              sudo npm install -g pm2
+            fi
+
+            # ── Install backend dependencies ────────────────────────────────────
+            echo "Installing backend dependencies..."
+            bun install
+
+            # ── Generate Prisma Client ──────────────────────────────────────────
+            echo "Generating Prisma Client..."
+            bunx prisma generate
+
+            # ── Restart the backend with PM2 ────────────────────────────────────
+            echo "Restarting backend with PM2..."
+            pm2 delete foodmitra-backend 2>/dev/null || true
+            pm2 start "bun src/server.ts" --name foodmitra-backend --cwd "$APP_DIR"
+            pm2 save
+
+            # ── Health check ────────────────────────────────────────────────────
+            echo "Waiting for server to start..."
+            sleep 3
+            if curl -s http://localhost:4000/health | grep -q "ok"; then
+              echo "✅ Backend is healthy on port 4000"
+            else
+              echo "⚠️ Health check failed — check PM2 logs: pm2 logs foodmitra-backend"
+              pm2 logs foodmitra-backend --lines 20 --nostream
+            fi
+
+            # ── Configure PM2 to auto-start on reboot ──────────────────────────
+            pm2 startup systemd -u ec2-user --hp /home/ec2-user 2>/dev/null || true
+
+            echo "✅ Deploy complete!"
