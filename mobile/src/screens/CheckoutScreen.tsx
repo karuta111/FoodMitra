@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, ApiError } from '../api/client';
 import { colors, radius, shadow } from '../theme/colors';
@@ -28,13 +29,20 @@ export default function CheckoutScreen({ navigation }: any) {
   const cartRestaurant = useCartStore((s) => s.restaurant);
   const clearCart      = useCartStore((s) => s.clearCart);
 
-  // ── Load addresses ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    api.get<Address[]>('/customers/addresses')
-      .then((r) => { setAddrs(r); if (r.length > 0) setSel(r[0].id); })
-      .catch(() => {})
-      .finally(() => setLoadingAddrs(false));
-  }, []);
+  // ── Load addresses (re-fetches every time screen gains focus) ──────────────
+  useFocusEffect(
+    useCallback(() => {
+      setLoadingAddrs(true);
+      api.get<Address[]>('/customers/addresses')
+        .then((r) => {
+          setAddrs(r);
+          // Only auto-select first address if nothing is selected yet
+          if (r.length > 0) setSel((prev) => prev ?? r[0].id);
+        })
+        .catch(() => {})
+        .finally(() => setLoadingAddrs(false));
+    }, [])
+  );
 
   // ── Sync in-memory cart → DB whenever the address selection changes ─────────
   // This gives us the real delivery fee scoped to that address.
