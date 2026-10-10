@@ -15,7 +15,7 @@ import { colors, radius, shadow } from '../theme/colors';
 
 const SUPPORT_PHONE = '+918007882286';
 const SUPPORT_PHONE_DISPLAY = '+91 8007882286';
-const SUPPORT_EMAIL = 'omkarghodekar14@gmail.com';
+const SUPPORT_EMAIL = 'omkarghodekar03@gmail.com';
 
 export default function ContactSupportScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();

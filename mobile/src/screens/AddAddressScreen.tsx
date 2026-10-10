@@ -7,8 +7,9 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
-  FlatList,
+  Modal,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,7 @@ import { Btn, Input } from '../components/ui';
 
 const DEFAULT_LAT = 18.52;
 const DEFAULT_LNG = 73.85;
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const LABELS = ['HOME', 'WORK', 'OTHER'] as const;
 type LabelType = (typeof LABELS)[number];
@@ -37,70 +39,94 @@ const labelIcon = (l: LabelType) => {
   return 'location-outline';
 };
 
-export default function AddAddressScreen({ navigation }: any) {
-  const [label, setLabel] = useState<LabelType>('HOME');
-  const [line1, setLine1] = useState('');
-  const [city, setCity] = useState('Pune');
-  const [pincode, setPincode] = useState('');
-  const [lat, setLat] = useState(DEFAULT_LAT);
-  const [lng, setLng] = useState(DEFAULT_LNG);
-  const [saving, setSaving] = useState(false);
-  const insets = useSafeAreaInsets();
+// Builds the Leaflet HTML for a given lat/lng
+const buildLeafletHTML = (initLat: number, initLng: number) => `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body { padding: 0; margin: 0; }
+      html, body, #map { height: 100%; width: 100%; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      var map = L.map('map', { zoomControl: true }).setView([${initLat}, ${initLng}], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
 
-  // Search state
+      var customIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      });
+
+      var marker = L.marker([${initLat}, ${initLng}], { icon: customIcon, draggable: true }).addTo(map);
+
+      // Tap on map moves marker
+      map.on('click', function(e) {
+        marker.setLatLng(e.latlng);
+        window.ReactNativeWebView.postMessage(JSON.stringify({ lat: e.latlng.lat, lng: e.latlng.lng }));
+      });
+
+      // Drag marker
+      marker.on('dragend', function() {
+        var ll = marker.getLatLng();
+        window.ReactNativeWebView.postMessage(JSON.stringify({ lat: ll.lat, lng: ll.lng }));
+      });
+
+      window.updateMap = function(newLat, newLng) {
+        marker.setLatLng([newLat, newLng]);
+        map.setView([newLat, newLng], 15);
+      };
+    </script>
+  </body>
+</html>
+`;
+
+// ─────────────────────────────────────────────
+// Full-screen map modal component
+// ─────────────────────────────────────────────
+interface MapModalProps {
+  visible: boolean;
+  initialLat: number;
+  initialLng: number;
+  onConfirm: (lat: number, lng: number) => void;
+  onClose: () => void;
+}
+
+function MapModal({ visible, initialLat, initialLng, onConfirm, onClose }: MapModalProps) {
+  const insets = useSafeAreaInsets();
+  const webViewRef = useRef<WebView>(null);
+  const [pendingLat, setPendingLat] = useState(initialLat);
+  const [pendingLng, setPendingLng] = useState(initialLng);
+  const [locating, setLocating] = useState(false);
+
+  // Search state inside modal
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<NominatimResult[]>([]);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  const webViewRef = useRef<WebView>(null);
-
-  // Leaflet HTML — initialised with DEFAULT coords; updateMap() is called after picks
-  const leafletHTML = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <style>
-          body { padding: 0; margin: 0; }
-          html, body, #map { height: 100%; width: 100%; }
-        </style>
-      </head>
-      <body>
-        <div id="map"></div>
-        <script>
-          var map = L.map('map', { zoomControl: false }).setView([${DEFAULT_LAT}, ${DEFAULT_LNG}], 15);
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
-          }).addTo(map);
-
-          var customIcon = L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
-          });
-
-          var marker = L.marker([${DEFAULT_LAT}, ${DEFAULT_LNG}], { icon: customIcon }).addTo(map);
-
-          map.on('click', function(e) {
-            marker.setLatLng(e.latlng);
-            window.ReactNativeWebView.postMessage(JSON.stringify({ lat: e.latlng.lat, lng: e.latlng.lng }));
-          });
-
-          window.updateMap = function(newLat, newLng) {
-            marker.setLatLng([newLat, newLng]);
-            map.setView([newLat, newLng], 15);
-          };
-        </script>
-      </body>
-    </html>
-  `;
+  // Reset pending coords when modal opens
+  useEffect(() => {
+    if (visible) {
+      setPendingLat(initialLat);
+      setPendingLng(initialLng);
+      setSearchQuery('');
+      setSearchResults([]);
+    }
+  }, [visible]);
 
   // Debounced Nominatim search
   useEffect(() => {
@@ -135,16 +161,16 @@ export default function AddAddressScreen({ navigation }: any) {
   }, [searchQuery]);
 
   const moveMap = (newLat: number, newLng: number) => {
-    setLat(newLat);
-    setLng(newLng);
+    setPendingLat(newLat);
+    setPendingLng(newLng);
     webViewRef.current?.injectJavaScript(`window.updateMap(${newLat}, ${newLng}); true;`);
   };
 
   const handleMapMessage = (e: any) => {
     try {
       const data = JSON.parse(e.nativeEvent.data);
-      setLat(data.lat);
-      setLng(data.lng);
+      setPendingLat(data.lat);
+      setPendingLng(data.lng);
     } catch {}
   };
 
@@ -157,6 +183,7 @@ export default function AddAddressScreen({ navigation }: any) {
   };
 
   const useMyLocation = async () => {
+    setLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -167,7 +194,134 @@ export default function AddAddressScreen({ navigation }: any) {
       moveMap(loc.coords.latitude, loc.coords.longitude);
     } catch {
       alert('Could not get your location');
+    } finally {
+      setLocating(false);
     }
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+
+        {/* Header */}
+        <View style={[ms.header, { paddingTop: Math.max(insets.top + 4, 16) }]}>
+          <TouchableOpacity style={ms.closeBtn} onPress={onClose} activeOpacity={0.8}>
+            <Ionicons name="arrow-back" size={20} color="#fff" />
+          </TouchableOpacity>
+          <Text style={ms.headerTitle}>Pick Location</Text>
+          <View style={{ width: 36 }} />
+        </View>
+
+        {/* Search bar */}
+        <View style={ms.searchContainer}>
+          <View style={ms.searchWrap}>
+            <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
+            <TextInput
+              style={ms.searchInput}
+              placeholder="Search a place…"
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searching && <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: 8 }} />}
+            {searchQuery !== '' && !searching && (
+              <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }} style={{ marginLeft: 8 }}>
+                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Search results dropdown */}
+          {searchResults.length > 0 && (
+            <View style={ms.searchResults}>
+              {searchResults.map((r, i) => (
+                <TouchableOpacity
+                  key={r.place_id}
+                  style={[ms.resultItem, i === searchResults.length - 1 && { borderBottomWidth: 0 }]}
+                  onPress={() => pickSearchResult(r)}
+                >
+                  <Ionicons name="location-outline" size={18} color={colors.primary} style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={ms.resultTitle} numberOfLines={1}>{r.display_name.split(',')[0]}</Text>
+                    <Text style={ms.resultSub} numberOfLines={1}>{r.display_name.split(',').slice(1).join(',').trim()}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Full-screen map — takes all remaining space */}
+        <View style={{ flex: 1 }}>
+          <WebView
+            ref={webViewRef}
+            source={{ html: buildLeafletHTML(initialLat, initialLng) }}
+            style={{ flex: 1 }}
+            onMessage={handleMapMessage}
+            scrollEnabled={false}
+            bounces={false}
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState
+            renderLoading={() => (
+              <View style={ms.mapLoader}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            )}
+          />
+        </View>
+
+        {/* Bottom action bar */}
+        <View style={[ms.bottomBar, { paddingBottom: Math.max(insets.bottom + 8, 16) }]}>
+          <TouchableOpacity style={ms.locateBtn} onPress={useMyLocation} disabled={locating}>
+            {locating
+              ? <ActivityIndicator size="small" color={colors.primary} />
+              : <Ionicons name="locate" size={20} color={colors.primary} />}
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginHorizontal: 12 }}>
+            <Text style={ms.coordText}>
+              {pendingLat.toFixed(5)}, {pendingLng.toFixed(5)}
+            </Text>
+            <Text style={ms.hintText}>Tap map or drag pin to adjust</Text>
+          </View>
+          <TouchableOpacity
+            style={ms.confirmBtn}
+            onPress={() => onConfirm(pendingLat, pendingLng)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="checkmark" size={20} color="#fff" />
+            <Text style={ms.confirmText}>Confirm</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Main screen
+// ─────────────────────────────────────────────
+export default function AddAddressScreen({ navigation }: any) {
+  const [label, setLabel] = useState<LabelType>('HOME');
+  const [line1, setLine1] = useState('');
+  const [city, setCity] = useState('Pune');
+  const [pincode, setPincode] = useState('');
+  const [lat, setLat] = useState(DEFAULT_LAT);
+  const [lng, setLng] = useState(DEFAULT_LNG);
+  const [saving, setSaving] = useState(false);
+  const [mapModalVisible, setMapModalVisible] = useState(false);
+  const insets = useSafeAreaInsets();
+
+  // Static preview WebView (non-interactive, just shows where the pin is)
+  const previewRef = useRef<WebView>(null);
+
+  const handleConfirmLocation = (newLat: number, newLng: number) => {
+    setLat(newLat);
+    setLng(newLng);
+    setMapModalVisible(false);
+    // Update the preview pin
+    previewRef.current?.injectJavaScript(`window.updateMap(${newLat}, ${newLng}); true;`);
   };
 
   const save = async () => {
@@ -193,7 +347,7 @@ export default function AddAddressScreen({ navigation }: any) {
     <View style={{ flex: 1, backgroundColor: '#F8F8F8' }}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
 
-      {/* Red hero header */}
+      {/* Header */}
       <View style={[s.hero, { paddingTop: Math.max(insets.top + 4, 16) }]}>
         <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={20} color="#fff" />
@@ -231,81 +385,49 @@ export default function AddAddressScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* ── Map picker ── */}
+        {/* ── Map preview + picker ── */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>PIN YOUR LOCATION</Text>
           <View style={s.card}>
-            {/* Search box */}
-            <View style={s.searchWrap}>
-              <Ionicons name="search" size={18} color={colors.textMuted} style={s.searchIcon} />
-              <TextInput
-                style={s.searchInput}
-                placeholder="Search a place (e.g. Rajgurunagar)"
-                placeholderTextColor={colors.textMuted}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searching && (
-                <ActivityIndicator size="small" color={colors.primary} style={s.searchIconRight} />
-              )}
-              {searchQuery !== '' && !searching && (
-                <TouchableOpacity
-                  onPress={() => { setSearchQuery(''); setSearchResults([]); }}
-                  style={s.searchIconRight}
-                >
-                  <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-                </TouchableOpacity>
-              )}
-            </View>
 
-            {/* Search results dropdown */}
-            {searchResults.length > 0 && (
-              <View style={s.searchResults}>
-                {searchResults.map((r, i) => (
-                  <TouchableOpacity
-                    key={r.place_id}
-                    style={[s.resultItem, i === searchResults.length - 1 && { borderBottomWidth: 0 }]}
-                    onPress={() => pickSearchResult(r)}
-                  >
-                    <Ionicons name="location-outline" size={18} color={colors.primary} style={{ marginTop: 2 }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.resultTitle} numberOfLines={1}>
-                        {r.display_name.split(',')[0]}
-                      </Text>
-                      <Text style={s.resultSub} numberOfLines={1}>
-                        {r.display_name.split(',').slice(1).join(',').trim()}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Leaflet map */}
-            <View style={s.mapWrap}>
+            {/* Static preview map */}
+            <View style={s.previewWrap}>
               <WebView
-                ref={webViewRef}
-                source={{ html: leafletHTML }}
-                style={s.map}
-                onMessage={handleMapMessage}
+                ref={previewRef}
+                source={{ html: buildLeafletHTML(lat, lng) }}
+                style={{ flex: 1 }}
                 scrollEnabled={false}
                 bounces={false}
+                javaScriptEnabled
+                domStorageEnabled
+                // Disable all touches so scroll/zoom doesn't fight the ScrollView
+                pointerEvents="none"
               />
+              {/* Tap overlay — opens the full-screen modal */}
+              <TouchableOpacity
+                style={s.previewOverlay}
+                onPress={() => setMapModalVisible(true)}
+                activeOpacity={0.85}
+              >
+                <View style={s.editBadge}>
+                  <Ionicons name="pencil" size={14} color="#fff" />
+                  <Text style={s.editBadgeText}>Change Location</Text>
+                </View>
+              </TouchableOpacity>
             </View>
 
-            {/* Use current location */}
-            <TouchableOpacity style={s.currentLocationBtn} onPress={useMyLocation}>
-              <Ionicons name="locate" size={18} color={colors.primary} />
-              <Text style={s.currentLocationText}>Use my current location</Text>
-            </TouchableOpacity>
-            <Text style={s.dragHint}>Drag the map or tap to set the exact location.</Text>
+            {/* Coordinates display */}
+            <View style={s.coordPill}>
+              <Ionicons name="location" size={14} color={colors.primary} />
+              <Text style={s.coordPillText}>{lat.toFixed(5)}, {lng.toFixed(5)}</Text>
+            </View>
           </View>
         </View>
 
         {/* Form fields */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>LOCATION DETAILS</Text>
-          <View style={s.card}>
+          <View style={s.formCard}>
             <Input
               label="Address Line 1 *"
               value={line1}
@@ -328,30 +450,6 @@ export default function AddAddressScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* Read-only coordinates */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>COORDINATES (auto-filled)</Text>
-          <View style={s.card}>
-            <View style={s.coordRow}>
-              <View style={s.coordField}>
-                <Text style={s.coordLabel}>Latitude</Text>
-                <View style={s.coordInputWrap}>
-                  <Ionicons name="location-outline" size={14} color={colors.textMuted} style={s.coordIcon} />
-                  <Text style={s.coordValue}>{lat.toFixed(6)}</Text>
-                </View>
-              </View>
-              <View style={s.coordDivider} />
-              <View style={s.coordField}>
-                <Text style={s.coordLabel}>Longitude</Text>
-                <View style={s.coordInputWrap}>
-                  <Ionicons name="location-outline" size={14} color={colors.textMuted} style={s.coordIcon} />
-                  <Text style={s.coordValue}>{lng.toFixed(6)}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        </View>
-
         <Btn
           title={saving ? 'Saving…' : 'Save Address'}
           onPress={save}
@@ -359,10 +457,22 @@ export default function AddAddressScreen({ navigation }: any) {
           disabled={!line1.trim()}
         />
       </ScrollView>
+
+      {/* Full-screen interactive map modal */}
+      <MapModal
+        visible={mapModalVisible}
+        initialLat={lat}
+        initialLng={lng}
+        onConfirm={handleConfirmLocation}
+        onClose={() => setMapModalVisible(false)}
+      />
     </View>
   );
 }
 
+// ─────────────────────────────────────────────
+// Styles — main screen
+// ─────────────────────────────────────────────
 const s = StyleSheet.create({
   hero: {
     backgroundColor: colors.primary,
@@ -436,12 +546,95 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: radius.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.sm,
+  },
+  // ── Form card (has padding, no overflow hidden) ──
+  formCard: {
+    backgroundColor: '#fff',
+    borderRadius: radius.md,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadow.sm,
   },
-  // ── Search ──
+  // ── Map preview ──
+  previewWrap: {
+    height: 180,
+    position: 'relative',
+  },
+  previewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    padding: 10,
+  },
+  editBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    ...shadow.md,
+  },
+  editBadgeText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  coordPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  coordPillText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontVariant: ['tabular-nums'],
+  },
+});
+
+// ─────────────────────────────────────────────
+// Styles — map modal
+// ─────────────────────────────────────────────
+const ms = StyleSheet.create({
+  header: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  searchContainer: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 4,
+    zIndex: 10,
+    elevation: 4,
+  },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -450,14 +643,8 @@ const s = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: 12,
     height: 44,
-    marginBottom: 10,
     backgroundColor: '#fff',
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchIconRight: {
-    marginLeft: 8,
+    marginBottom: 6,
   },
   searchInput: {
     flex: 1,
@@ -469,9 +656,8 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
-    marginTop: -6,
-    marginBottom: 10,
-    maxHeight: 200,
+    marginBottom: 6,
+    maxHeight: 220,
     ...shadow.md,
   },
   resultItem: {
@@ -492,77 +678,55 @@ const s = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
-  // ── Map ──
-  mapWrap: {
-    height: 200,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 12,
-  },
-  map: {
-    flex: 1,
-  },
-  currentLocationBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  mapLoader: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    gap: 8,
-    marginBottom: 8,
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
   },
-  currentLocationText: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  dragHint: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  // ── Read-only coordinates ──
-  coordRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 12,
-  },
-  coordField: {
-    flex: 1,
-  },
-  coordDivider: {
-    width: 1,
-    backgroundColor: colors.borderLight,
-    marginVertical: 4,
-  },
-  coordLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginBottom: 6,
-  },
-  coordInputWrap: {
+  bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    borderRadius: radius.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: colors.backgroundGrey,
-    gap: 6,
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    ...shadow.md,
   },
-  coordIcon: {
-    opacity: 0.6,
+  locateBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.primaryBg,
   },
-  coordValue: {
-    flex: 1,
+  coordText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    fontWeight: '600',
+    color: colors.text,
     fontVariant: ['tabular-nums'],
+  },
+  hintText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  confirmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+  },
+  confirmText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

@@ -1,16 +1,23 @@
 {
-  "plugins": [
-    "@react-native-community/datetimepicker"
-  ],
-  "extra": {
-    "eas": {
-      "projectId": "6f781c06-1833-496a-984c-8555d4676953"
-    }
-  },
   "expo": {
+    "name": "FoodMitra",
+    "slug": "foodmitra",
     "android": {
-      "package": "com.omkar14.foodmitramobile"
+      "package": "com.omkar14.foodmitramobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ],
     "extra": {
       "eas": {
         "projectId": "6f781c06-1833-496a-984c-8555d4676953"
