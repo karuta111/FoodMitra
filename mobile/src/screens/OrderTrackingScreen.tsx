@@ -86,6 +86,7 @@ export default function OrderTrackingScreen({ route, navigation }: any) {
   const [tracking, setTracking] = useState<TrackingData | null>(null);
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const insets = useSafeAreaInsets();
 
@@ -98,12 +99,15 @@ export default function OrderTrackingScreen({ route, navigation }: any) {
       ]);
       setTracking(t);
       setDetail(d);
+      setError(null);
       // Stop polling once order reaches a terminal state
       if (TERMINAL.has(t.currentStatus)) {
         clearInterval(intervalRef.current!);
         intervalRef.current = null;
       }
-    } catch {}
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load order details');
+    }
   };
 
   useEffect(() => {
@@ -174,10 +178,24 @@ export default function OrderTrackingScreen({ route, navigation }: any) {
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={s.loadText}>Loading order details…</Text>
         </View>
-      ) : !tracking || !detail ? (
+      ) : error || !tracking || !detail ? (
         <View style={s.loadWrap}>
-          <Ionicons name="alert-circle-outline" size={48} color={colors.textLight} />
-          <Text style={s.emptyTitle}>Order not found</Text>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
+          <Text style={s.emptyTitle}>{error ? 'Could not load order' : 'Order not found'}</Text>
+          {error ? <Text style={s.errorMsg}>{error}</Text> : null}
+          {error ? (
+            <TouchableOpacity
+              style={s.retryBtn}
+              onPress={() => {
+                setError(null);
+                setLoading(true);
+                loadData().finally(() => setLoading(false));
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={s.retryText}>Retry</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : (
         <ScrollView
@@ -445,6 +463,27 @@ const s = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: colors.text,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  errorMsg: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 6,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  retryBtn: {
+    marginTop: 16,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 28,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
   content: {
     padding: 16,

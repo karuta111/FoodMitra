@@ -25,6 +25,7 @@ export default function OrderHistoryScreen({ navigation }: any) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const isLoadingMoreRef = useRef(false);
   const insets = useSafeAreaInsets();
 
@@ -36,7 +37,10 @@ export default function OrderHistoryScreen({ navigation }: any) {
       setTotal(res.total);
       setOrders((prev) => (replace ? res.items : [...prev, ...res.items]));
       setPage(pageNum);
-    } catch {}
+      setFetchError(null);
+    } catch (err: any) {
+      setFetchError(err?.message || 'Failed to load orders');
+    }
   }, []);
 
   // Initial load
@@ -111,6 +115,23 @@ export default function OrderHistoryScreen({ navigation }: any) {
           loading ? (
             <View style={s.centerWrap}>
               <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : fetchError ? (
+            <View style={s.centerWrap}>
+              <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
+              <Text style={s.errorTitle}>Could not load orders</Text>
+              <Text style={s.errorMsg}>{fetchError}</Text>
+              <TouchableOpacity
+                style={s.retryBtn}
+                onPress={() => {
+                  setFetchError(null);
+                  setLoading(true);
+                  fetchPage(1, true).finally(() => setLoading(false));
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={s.retryText}>Retry</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <EmptyState title="No orders yet" message="Place your first order!" />
@@ -198,6 +219,32 @@ const s = StyleSheet.create({
   centerWrap: {
     paddingTop: 60,
     alignItems: 'center',
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  errorMsg: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 6,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  retryBtn: {
+    marginTop: 16,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 28,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
   footerLoader: {
     flexDirection: 'row',
