@@ -237,22 +237,28 @@ export default function LoginScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
 
-      {/* Top illustration */}
-      <View style={s.illustrationWrap}>
-        <View style={s.illustrationBg} />
+      {/* ── Premium hero header ── */}
+      <View style={s.hero}>
+        {/* Dark overlay circle decorations for depth */}
+        <View style={s.heroDeco1} />
+        <View style={s.heroDeco2} />
+
         <View style={s.logoContainer}>
-          <Image
-            source={require('../../assets/icon.png')}
-            style={s.logoImage}
-            resizeMode="contain"
-          />
+          {/* Logo card with shadow */}
+          <View style={s.logoCard}>
+            <Image
+              source={require('../../assets/icon.png')}
+              style={s.logoImage}
+              resizeMode="cover"
+            />
+          </View>
           <Text style={s.appName}>
-            <Text style={{ color: colors.text }}>Food</Text>
-            <Text style={{ color: colors.primary }}>Mitra</Text>
+            <Text style={{ color: '#fff' }}>Food</Text>
+            <Text style={{ color: '#FFD580' }}>Mitra</Text>
           </Text>
-          <Text style={s.tagline}>Order food you love</Text>
+          <Text style={s.tagline}>Order food you love 🍽️</Text>
         </View>
       </View>
 
@@ -693,29 +699,67 @@ function ErrorBox({ msg }: any) {
 // ─── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: '#F8F8F8' },
 
-  // Illustration top
-  illustrationWrap: { height: 220, overflow: 'hidden', position: 'relative' },
-  illustrationBg: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: '#F5F5F5',
-    borderBottomLeftRadius: 40, borderBottomRightRadius: 40,
+  // ── Hero ──
+  hero: {
+    height: 240,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
+    overflow: 'hidden',
   },
-  logoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 20 },
+  // Decorative circles for depth
+  heroDeco1: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    top: -60,
+    right: -50,
+  },
+  heroDeco2: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    bottom: -40,
+    left: -30,
+  },
+  logoContainer: { alignItems: 'center', paddingTop: 46 },
+  logoCard: {
+    width: 90,
+    height: 90,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
+    marginBottom: 14,
+  },
   logoImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
   },
   appName: {
-    fontSize: 30,
+    fontSize: 32,
     fontWeight: '900',
-    color: colors.text,
-    marginTop: 10,
     letterSpacing: 0.5,
+    marginBottom: 4,
   },
-  tagline: { fontSize: 13, color: colors.textSecondary, marginTop: 3 },
+  tagline: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 0.3,
+  },
 
   // Form scroll area
   formScroll: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
