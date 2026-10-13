@@ -14,7 +14,7 @@ export default function TermsOfService() {
           <section><h2 className="text-lg font-semibold text-slate-900 mb-2">5. Cancellations and Refunds</h2><ul className="list-disc pl-6 space-y-1"><li>Orders can be cancelled before restaurant approval.</li><li>Refunds, if applicable, processed within 5-7 business days.</li></ul></section>
           <section><h2 className="text-lg font-semibold text-slate-900 mb-2">6. User Conduct</h2><p>You agree not to: place fraudulent orders, harass staff, hack or disrupt the Service, or use automated systems to place orders.</p></section>
           <section><h2 className="text-lg font-semibold text-slate-900 mb-2">7. Limitation of Liability</h2><p>FoodMitra is an intermediary and is not responsible for food quality, safety, delivery delays, or restaurant unavailability.</p></section>
-          <section><h2 className="text-lg font-semibold text-slate-900 mb-2">8. Contact</h2><p>Email: <a href="mailto:admin@foodmitra.com" className="text-orange-600 hover:underline">admin@foodmitra.com</a></p></section>
+          <section><h2 className="text-lg font-semibold text-slate-900 mb-2">8. Contact</h2><p>Email: <a href="mailto:omkarghodekar18@gmail.com" className="text-orange-600 hover:underline">omkarghodekar18@gmail.com</a><br/>Phone: +91 8446855637, +91 7350978721</p></section>
           <hr className="border-slate-200 my-8" />
           <p className="text-xs text-slate-400 text-center">© 2026 FoodMitra. All rights reserved.</p>
         </div>
