@@ -3,7 +3,12 @@
     "name": "FoodMitra",
     "slug": "foodmitra-mobile",
     "android": {
-      "package": "com.omkar14.foodmitramobile",
+      "package": "com.foodmitra.myapp",
+      "permissions": [
+        "INTERNET",
+        "LOCATION",
+        "NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
@@ -16,7 +21,8 @@
       "backgroundColor": "#FFFFFF"
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-font"
     ],
     "extra": {
       "eas": {

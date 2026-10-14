@@ -307,7 +307,7 @@ export default function LoginScreen() {
                 label="Full name"
                 value={fullName}
                 onChange={setFullName}
-                placeholder="John Doe"
+                placeholder="Elon Musk"
               />
               <PhoneField value={phone} onChange={setPhone} />
               <PasswordField
@@ -387,7 +387,7 @@ export default function LoginScreen() {
                     label="Full name"
                     value={fullName}
                     onChange={setFullName}
-                    placeholder="Omkar Ghodekar"
+                    placeholder="John Doe"
                   />
 
                   <PhoneField
