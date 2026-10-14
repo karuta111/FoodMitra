@@ -6,7 +6,7 @@ import { toastApiError } from '@/lib/toast-errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Lock, User as UserIcon, Eye, EyeOff, KeyRound, ArrowLeft, Smartphone, ShieldCheck, UtensilsCrossed } from 'lucide-react';
+import { Lock, User as UserIcon, Eye, EyeOff, KeyRound, ArrowLeft, Smartphone } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -193,9 +193,8 @@ export function LoginPage() {
  />
  {/* Logo top-left */}
  <div className="flex items-center gap-2.5 relative">
- <div className="bg-white/20 backdrop-blur w-10 h-10 rounded-xl flex items-center justify-center">
- <UtensilsCrossed className="w-5 h-5" />
- </div>
+ {/* eslint-disable-next-line @next/next/no-img-element */}
+ <img src="/icon.png" alt="FoodMitra" className="w-10 h-10 rounded-xl shadow-sm" />
  <span className="font-bold text-xl">FoodMitra</span>
  </div>
  {/* Hero copy center */}
