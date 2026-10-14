@@ -362,12 +362,12 @@ function AdminRestaurants({ onOpenMenu }: { onOpenMenu: (r: RestaurantListItem) 
  openingTime: editOpening,
  closingTime: editClosing,
  logoUrl: editLogoUrl || null,
- address: editAddr1 ? {
- line1: editAddr1,
- city: editCity,
- latitude: parseFloat(editLat),
- longitude: parseFloat(editLng),
- } : undefined,
+ address: {
+ line1: editAddr1 || 'Address not specified',
+ city: editCity || 'Pune',
+ latitude: parseFloat(editLat) || 18.52,
+ longitude: parseFloat(editLng) || 73.85,
+ },
  });
  toast.success('Restaurant updated');
  setEditTarget(null);
