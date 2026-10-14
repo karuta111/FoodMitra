@@ -277,7 +277,7 @@ function AdminRestaurants({ onOpenMenu }: { onOpenMenu: (r: RestaurantListItem) 
  openingTime: newOpening,
  closingTime: newClosing,
  logoUrl: newLogoUrl || undefined,
- address: newAddr1 ? { line1: newAddr1, city: newCity, latitude: parseFloat(newLat), longitude: parseFloat(newLng) } : undefined,
+ address: { line1: newAddr1 || 'Address not specified', city: newCity || 'Pune', latitude: parseFloat(newLat) || 18.52, longitude: parseFloat(newLng) || 73.85 },
  });
  toast.success('Restaurant created');
  setShowAdd(false);
@@ -504,7 +504,7 @@ function AdminRestaurants({ onOpenMenu }: { onOpenMenu: (r: RestaurantListItem) 
  <div className="space-y-1.5">
  <Label htmlFor="r-addr">Address</Label>
  <div className="flex gap-2">
- <Input id="r-addr" placeholder="Will auto-fill from map" value={newAddr1} onChange={(e) => setNewAddr1(e.target.value)} className="flex-1" />
+ <Input id="r-addr" placeholder="Enter restaurant address" value={newAddr1} onChange={(e) => setNewAddr1(e.target.value)} className="flex-1" />
  <Button type="button" size="sm" variant="outline" onClick={() => setShowLocationPicker(true)}>
  <MapPin className="w-3 h-3 mr-1" /> Pick on map
  </Button>
@@ -575,7 +575,7 @@ function AdminRestaurants({ onOpenMenu }: { onOpenMenu: (r: RestaurantListItem) 
  <div className="space-y-1.5">
  <Label htmlFor="e-addr">Address</Label>
  <div className="flex gap-2">
- <Input id="e-addr" placeholder="Will auto-fill from map" value={editAddr1} onChange={(e) => setEditAddr1(e.target.value)} className="flex-1" />
+ <Input id="e-addr" placeholder="Enter restaurant address" value={editAddr1} onChange={(e) => setEditAddr1(e.target.value)} className="flex-1" />
  <Button type="button" size="sm" variant="outline" onClick={() => setShowEditLocationPicker(true)}>
  <MapPin className="w-3 h-3 mr-1" /> Pick on map
  </Button>
