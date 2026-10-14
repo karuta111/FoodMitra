@@ -18,6 +18,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
  title: "FoodMitra — Admin & Restaurant Console",
  description: "Production-grade food delivery platform — Admin, Restaurant, and Customer flows.",
+ icons: {
+ icon: "/icon.png",
+ apple: "/icon.png",
+ },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
