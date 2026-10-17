@@ -1,6 +1,7 @@
 // src/lib/integrations/telegram.ts
 // Telegram Bot notification service.
-// Sends a WhatsApp-style alert to the admin's Telegram when a new order is placed.
+// Sends an alert to the admin's Telegram when a new order is placed,
+// with TWO copy buttons: one for restaurant details, one for rider details.
 //
 // Setup:
 //   1. Create a bot via @BotFather → get the bot token
@@ -44,7 +45,56 @@ export async function sendTelegramMessage(text: string): Promise<void> {
 }
 
 /**
- * Send a rich order alert to the admin's Telegram.
+ * Send a message with multiple inline "copy_text" buttons.
+ * Each button copies its own text to the user's clipboard when tapped.
+ * Uses Telegram Bot API 7.x copy_text button type.
+ */
+export async function sendTelegramMessageWithCopyButtons(
+  htmlMessage: string,
+  buttons: Array<{ text: string; copyText: string }>,
+): Promise<void> {
+  if (!isTelegramConfigured()) {
+    console.warn('[telegram] Not configured — set TELEGRAM_BOT_TOKEN + TELEGRAM_ADMIN_CHAT_ID');
+    return;
+  }
+  try {
+    const inlineKeyboard = buttons.map((btn) => [
+      { text: btn.text, copy_text: { text: btn.copyText } },
+    ]);
+
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_CHAT_ID,
+        text: htmlMessage,
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: inlineKeyboard },
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      console.error('[telegram] sendMessage with copy buttons failed:', res.status, body.slice(0, 200));
+      // Fallback: send without buttons
+      await sendTelegramMessage(htmlMessage);
+    }
+  } catch (err) {
+    console.error('[telegram] sendMessage with copy buttons error:', err);
+    // Fallback: send as plain message
+    await sendTelegramMessage(htmlMessage);
+  }
+}
+
+/**
+ * Send a rich order alert to the admin's Telegram with TWO copy buttons:
+ *
+ * 1. "🍽️ Copy restaurant details" — order ID + menu items only (no customer/pricing/address).
+ *    Used when forwarding to the restaurant so they know what to prepare.
+ *
+ * 2. "🛵 Copy rider details" — restaurant + customer + order ID + items + total + address.
+ *    Used when forwarding to the delivery rider so they know where to pick up and deliver.
+ *
+ * Both buttons use Telegram's copy_text feature — one tap copies to clipboard.
  * Called from OrderService.createOrder() after the order is committed.
  */
 export async function sendOrderAlert(order: {
@@ -81,5 +131,38 @@ export async function sendOrderAlert(order: {
     `💳 Payment: ${order.paymentStatus}`,
   ].join('\n');
 
-  await sendTelegramMessage(msg);
+  // --- Button 1: Restaurant details ---
+  // Order ID + menu items only. No customer info, no pricing, no address.
+  const restaurantCopyText = [
+    `Order: ${order.shortCode}`,
+    `${order.restaurantName}`,
+    '',
+    order.items
+      .map((it) => `${it.name} x${it.quantity}`)
+      .join('\n'),
+  ].join('\n');
+
+  // --- Button 2: Rider details ---
+  // Full details: restaurant, customer, order ID, items, total, address.
+  const riderCopyText = [
+    `Order: ${order.shortCode}`,
+    `Restaurant: ${order.restaurantName}`,
+    `Customer: ${order.customerName || '—'} (${order.customerPhone})`,
+    '',
+    order.items
+      .map((it) => `${it.name} x${it.quantity} - Rs.${it.subtotal}`)
+      .join('\n'),
+    '',
+    `Total: Rs.${order.totalAmount}`,
+    `Address: ${order.deliveryAddress}`,
+  ].join('\n');
+
+  // Truncate to 256 chars (Telegram copy_text limit)
+  const restaurantCopy = restaurantCopyText.slice(0, 256);
+  const riderCopy = riderCopyText.slice(0, 256);
+
+  await sendTelegramMessageWithCopyButtons(msg, [
+    { text: '🍽️ Copy restaurant details', copyText: restaurantCopy },
+    { text: '🛵 Copy rider details', copyText: riderCopy },
+  ]);
 }
